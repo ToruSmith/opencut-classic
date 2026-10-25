@@ -36,6 +36,16 @@ jobs:
         working-directory: apps/web
         run: ../../.github/scripts/run-step.sh "build" bun run build
 
+      - name: Bundle report
+        working-directory: apps/web
+        run: node scripts/report-bundle.mjs dist 40
+
+      - name: Unit tests
+        id: tests
+        continue-on-error: true
+        working-directory: apps/web
+        run: TAIL=150 ../../.github/scripts/run-step.sh "tests" bun test src
+
       - name: Fail if typecheck failed
         if: steps.typecheck.outcome == 'failure'
         run: exit 1
