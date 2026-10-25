@@ -17,6 +17,22 @@ interface VideoSinkData {
 	prefetchPromise: Promise<void> | null;
 }
 
+/** 預覽時解碼的最大尺寸(通常是專案畫布大小);省略代表用影片原始解析度(匯出) */
+export interface VideoDecodeLimit {
+	width: number;
+	height: number;
+}
+
+function getSinkKey({
+	mediaId,
+	maxSize,
+}: {
+	mediaId: string;
+	maxSize?: VideoDecodeLimit;
+}): string {
+	return maxSize ? `${mediaId}@${maxSize.width}x${maxSize.height}` : mediaId;
+}
+
 export class VideoCache {
 	private sinks = new Map<string, VideoSinkData>();
 	private initPromises = new Map<string, Promise<void>>();
@@ -27,28 +43,33 @@ export class VideoCache {
 		mediaId,
 		file,
 		time,
+		maxSize,
 	}: {
 		mediaId: string;
 		file: File;
 		time: number;
+		/** 預覽用:把解碼後的畫面縮到不超過這個尺寸,大幅減少 4K 素材的解碼後處理與紋理上傳量 */
+		maxSize?: VideoDecodeLimit;
 	}): Promise<WrappedCanvas | null> {
-		await this.ensureSink({ mediaId, file });
+		// 預覽與匯出各用自己的解碼器,互不搶同一個 iterator
+		const key = getSinkKey({ mediaId, maxSize });
+		await this.ensureSink({ key, file, maxSize });
 
-		const sinkData = this.sinks.get(mediaId);
+		const sinkData = this.sinks.get(key);
 		if (!sinkData) return null;
 
-		const generation = (this.seekGenerations.get(mediaId) ?? 0) + 1;
-		this.seekGenerations.set(mediaId, generation);
+		const generation = (this.seekGenerations.get(key) ?? 0) + 1;
+		this.seekGenerations.set(key, generation);
 
-		const previous = this.frameChain.get(mediaId) ?? Promise.resolve();
+		const previous = this.frameChain.get(key) ?? Promise.resolve();
 		const current = previous.then(() => {
-			if (this.seekGenerations.get(mediaId) !== generation) {
+			if (this.seekGenerations.get(key) !== generation) {
 				return sinkData.currentFrame ?? null;
 			}
 			return this.resolveFrame({ sinkData, time });
 		});
 		this.frameChain.set(
-			mediaId,
+			key,
 			current.catch(() => {}),
 		);
 		return current;
@@ -233,34 +254,38 @@ export class VideoCache {
 		}
 	}
 	private async ensureSink({
-		mediaId,
+		key,
 		file,
+		maxSize,
 	}: {
-		mediaId: string;
+		key: string;
 		file: File;
+		maxSize?: VideoDecodeLimit;
 	}): Promise<void> {
-		if (this.sinks.has(mediaId)) return;
+		if (this.sinks.has(key)) return;
 
-		if (this.initPromises.has(mediaId)) {
-			await this.initPromises.get(mediaId);
+		if (this.initPromises.has(key)) {
+			await this.initPromises.get(key);
 			return;
 		}
 
-		const initPromise = this.initializeSink({ mediaId, file });
-		this.initPromises.set(mediaId, initPromise);
+		const initPromise = this.initializeSink({ key, file, maxSize });
+		this.initPromises.set(key, initPromise);
 
 		try {
 			await initPromise;
 		} finally {
-			this.initPromises.delete(mediaId);
+			this.initPromises.delete(key);
 		}
 	}
 	private async initializeSink({
-		mediaId,
+		key,
 		file,
+		maxSize,
 	}: {
-		mediaId: string;
+		key: string;
 		file: File;
+		maxSize?: VideoDecodeLimit;
 	}): Promise<void> {
 		const input = new Input({
 			source: new BlobSource(file),
@@ -278,12 +303,23 @@ export class VideoCache {
 				throw new Error("Video codec not supported for decoding");
 			}
 
+			// 只給 width,高度會依比例自動推算(不會有黑邊);來源較小時維持原尺寸
+			const scale = maxSize
+				? Math.min(
+						1,
+						maxSize.width / videoTrack.displayWidth,
+						maxSize.height / videoTrack.displayHeight,
+					)
+				: 1;
 			const sink = new CanvasSink(videoTrack, {
 				poolSize: 3,
 				fit: "contain",
+				...(scale < 1
+					? { width: Math.max(2, Math.round(videoTrack.displayWidth * scale)) }
+					: {}),
 			});
 
-			this.sinks.set(mediaId, {
+			this.sinks.set(key, {
 				input,
 				sink,
 				iterator: null,
@@ -295,30 +331,39 @@ export class VideoCache {
 			});
 		} catch (error) {
 			input.dispose();
-			console.error(`Failed to initialize video sink for ${mediaId}:`, error);
+			console.error(`Failed to initialize video sink for ${key}:`, error);
 			throw error;
 		}
 	}
 
+	/** 清掉某個素材的所有解碼器(原始解析度與各種預覽尺寸) */
 	clearVideo({ mediaId }: { mediaId: string }): void {
-		const sinkData = this.sinks.get(mediaId);
-		if (sinkData) {
-			if (sinkData.iterator) {
+		const belongsToMedia = (key: string) =>
+			key === mediaId || key.startsWith(`${mediaId}@`);
+
+		for (const key of [...this.sinks.keys()].filter(belongsToMedia)) {
+			const sinkData = this.sinks.get(key);
+			if (sinkData?.iterator) {
 				void sinkData.iterator.return();
 			}
-
-			sinkData.input.dispose();
-			this.sinks.delete(mediaId);
+			sinkData?.input.dispose();
+			this.sinks.delete(key);
 		}
 
-		this.initPromises.delete(mediaId);
-		this.frameChain.delete(mediaId);
-		this.seekGenerations.delete(mediaId);
+		for (const map of [
+			this.initPromises,
+			this.frameChain,
+			this.seekGenerations,
+		] as Array<Map<string, unknown>>) {
+			for (const key of [...map.keys()].filter(belongsToMedia)) {
+				map.delete(key);
+			}
+		}
 	}
 
 	clearAll(): void {
-		for (const [mediaId] of this.sinks) {
-			this.clearVideo({ mediaId });
+		for (const key of [...this.sinks.keys()]) {
+			this.clearVideo({ mediaId: key.split("@")[0] });
 		}
 	}
 

@@ -10,6 +10,11 @@ import { CanvasRenderer } from "@/services/renderer/canvas-renderer";
 import { TICKS_PER_SECOND } from "@/wasm";
 import type { RootNode } from "@/services/renderer/nodes/root-node";
 import { buildScene } from "@/services/renderer/scene-builder";
+import {
+	incrementCounter,
+	measureSpanAsync,
+	measureSpanSync,
+} from "@/diagnostics/render-perf";
 import { PreviewOverlayLayer } from "./overlay-layer";
 import { PreviewInteractionOverlay } from "./preview-interaction-overlay";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
@@ -106,13 +111,17 @@ function RenderTreeController() {
 		if (!activeProject) return;
 
 		const duration = editor.timeline.getTotalDuration();
-		const renderTree = buildScene({
-			tracks,
-			mediaAssets,
-			duration,
-			canvasSize: { width, height },
-			background: activeProject.settings.background,
-			isPreview: true,
+		const renderTree = measureSpanSync({
+			name: "sceneRebuild",
+			fn: () =>
+				buildScene({
+					tracks,
+					mediaAssets,
+					duration,
+					canvasSize: { width, height },
+					background: activeProject.settings.background,
+					isPreview: true,
+				}),
 		});
 
 		editor.renderer.setRenderTree({ renderTree });
@@ -161,6 +170,7 @@ function PreviewCanvas({
 			width: nativeWidth,
 			height: nativeHeight,
 			fps: activeProject.settings.fps,
+			quality: "preview",
 		});
 	}, [nativeWidth, nativeHeight, activeProject.settings.fps]);
 
@@ -183,7 +193,12 @@ function PreviewCanvas({
 	}, [renderer]);
 
 	const render = useCallback(() => {
-		if (!renderTree || renderingRef.current) return;
+		if (!renderTree) return;
+		if (renderingRef.current) {
+			// 上一格還沒畫完又輪到下一次 rAF:代表單格耗時超過一個畫面間隔
+			incrementCounter({ name: "previewBusyTick" });
+			return;
+		}
 
 		const renderTime = Math.min(
 			editor.playback.getCurrentTime(),
@@ -204,9 +219,15 @@ function PreviewCanvas({
 		renderingRef.current = true;
 		lastSceneRef.current = renderTree;
 		lastFrameRef.current = frame;
-		renderer
-			.render({ node: renderTree, time: renderTime })
-			.then(() => {
+		// 渲染失敗時也要放開旗標,否則預覽會永遠停在這一格
+		void measureSpanAsync({
+			name: "previewFrame",
+			fn: () => renderer.render({ node: renderTree, time: renderTime }),
+		})
+			.catch((error) => {
+				console.error("Preview render failed:", error);
+			})
+			.finally(() => {
 				renderingRef.current = false;
 			});
 	}, [renderer, renderTree, editor.playback, editor.timeline]);

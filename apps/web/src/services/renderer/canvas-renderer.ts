@@ -14,6 +14,11 @@ export type CanvasRendererParams = {
 	width: number;
 	height: number;
 	fps: FrameRate;
+	/**
+	 * "preview":影片縮到畫布大小再解碼,換取流暢度。
+	 * "full"(預設):用影片原始解析度,匯出與快照使用。
+	 */
+	quality?: "preview" | "full";
 };
 
 export class CanvasRenderer {
@@ -22,11 +27,13 @@ export class CanvasRenderer {
 	width: number;
 	height: number;
 	fps: FrameRate;
+	quality: "preview" | "full";
 
-	constructor({ width, height, fps }: CanvasRendererParams) {
+	constructor({ width, height, fps, quality = "full" }: CanvasRendererParams) {
 		this.width = width;
 		this.height = height;
 		this.fps = fps;
+		this.quality = quality;
 
 		const surface = createCanvasSurface({ width, height });
 		this.canvas = surface.canvas;
@@ -39,6 +46,13 @@ export class CanvasRenderer {
 			height: this.height,
 		});
 		return wasmCompositor.getCanvas();
+	}
+
+	/** 影片解碼的尺寸上限;"full" 時不限制 */
+	getVideoDecodeLimit(): { width: number; height: number } | undefined {
+		return this.quality === "preview"
+			? { width: this.width, height: this.height }
+			: undefined;
 	}
 
 	setSize({ width, height }: { width: number; height: number }) {
@@ -71,6 +85,8 @@ export class CanvasRenderer {
 			name: "renderFrame",
 			fn: () => wasmCompositor.render(frame),
 		});
+		// 預覽也走 render();統計要在這裡結算,否則 __renderPerf 在預覽永遠不會輸出
+		onRenderPerfFrameComplete();
 	}
 
 	async renderToCanvas({
@@ -100,6 +116,5 @@ export class CanvasRenderer {
 					targetCanvas.height,
 				),
 		});
-		onRenderPerfFrameComplete();
 	}
 }

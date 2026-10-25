@@ -206,6 +206,7 @@ async function resolveVideoNode({
 		mediaId: node.params.mediaId,
 		file: node.params.file,
 		time: mediaTimeToSeconds({ time: roundMediaTime({ time: sourceTimeTicks }) }),
+		maxSize: context.renderer.getVideoDecodeLimit(),
 	});
 	if (!frame) {
 		return null;
@@ -387,7 +388,11 @@ async function resolveBlurBackgroundNode({
 		return null;
 	}
 
-	const backdropSource = await resolveBackdropSource({ node, clipTime });
+	const backdropSource = await resolveBackdropSource({
+		node,
+		clipTime,
+		maxSize: context.renderer.getVideoDecodeLimit(),
+	});
 	if (!backdropSource) {
 		return null;
 	}
@@ -412,9 +417,11 @@ async function resolveBlurBackgroundNode({
 async function resolveBackdropSource({
 	node,
 	clipTime,
+	maxSize,
 }: {
 	node: BlurBackgroundNode;
 	clipTime: number;
+	maxSize?: { width: number; height: number };
 }): Promise<BackdropSource | null> {
 	if (node.params.mediaType === "video") {
 		const sourceTimeTicks =
@@ -427,6 +434,7 @@ async function resolveBackdropSource({
 			mediaId: node.params.mediaId,
 			file: node.params.file,
 			time: mediaTimeToSeconds({ time: roundMediaTime({ time: sourceTimeTicks }) }),
+			maxSize,
 		});
 		if (!frame) {
 			return null;
