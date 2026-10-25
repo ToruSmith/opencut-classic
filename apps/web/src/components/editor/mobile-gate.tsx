@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "../ui/button";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/hooks/use-router";
 
 const STORAGE_KEY = "mobile-acknowledged";
 

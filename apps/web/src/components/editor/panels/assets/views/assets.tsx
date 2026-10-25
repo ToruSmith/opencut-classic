@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Image from "@/components/ui/app-image";
 import { useMemo, useState } from "react";
 import { PanelView } from "@/components/editor/panels/assets/views/base-panel";
 import { MediaDragOverlay } from "@/components/editor/panels/assets/drag-overlay";
@@ -453,7 +453,6 @@ function MediaPreview({
 					sizes="100vw"
 					className="object-cover"
 					loading="lazy"
-					unoptimized
 				/>
 			</div>
 		);
@@ -470,7 +469,6 @@ function MediaPreview({
 						sizes="100vw"
 						className="rounded object-cover"
 						loading="lazy"
-						unoptimized
 					/>
 					{shouldShowDurationBadge ? (
 						<MediaDurationBadge duration={item.duration} />

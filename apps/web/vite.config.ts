@@ -12,13 +12,6 @@ export default defineConfig({
 	resolve: {
 		alias: [
 			{ find: /^@\//, replacement: `${r("./src")}/` },
-			// 過渡期：以相容層取代 Next.js 的元件，之後再逐步換成原生寫法
-			{ find: /^next\/link$/, replacement: r("./src/shims/next-link.tsx") },
-			{ find: /^next\/image$/, replacement: r("./src/shims/next-image.tsx") },
-			{
-				find: /^next\/navigation$/,
-				replacement: r("./src/shims/next-navigation.ts"),
-			},
 		// CI builds the Rust/WASM crates (custom shaders) and points here.
 		...(process.env.OPENCUT_WASM_LOCAL
 			? [{ find: /^opencut-wasm$/, replacement: r("../../rust/wasm/pkg") }]

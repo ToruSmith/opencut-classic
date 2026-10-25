@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/hooks/use-router";
 import { Loader2 } from "lucide-react";
 import { EditorCore } from "@/core";
 import { useEditor } from "@/editor/use-editor";

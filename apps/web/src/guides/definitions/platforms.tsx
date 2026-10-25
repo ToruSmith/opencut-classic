@@ -1,4 +1,4 @@
-import Image from "next/image";
+import Image from "@/components/ui/app-image";
 import type { GuideDefinition } from "@/guides/types";
 import { TikTokLayout } from "./tiktok-layout";
 
@@ -17,7 +17,6 @@ function PlatformLogo({
 			height={18}
 			className={className}
 			draggable={false}
-			unoptimized
 		/>
 	);
 }

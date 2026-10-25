@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Image from "@/components/ui/app-image";
 import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -409,7 +409,6 @@ function StickerItem({
 					}
 					onError={() => setHasImageError(true)}
 					loading="lazy"
-					unoptimized
 				/>
 			)}
 		</div>

@@ -60,7 +60,7 @@ import {
 import { useElementSelection } from "@/timeline/hooks/element/use-element-selection";
 import { resolveStickerId } from "@/stickers";
 import { buildGraphicPreviewUrl } from "@/graphics";
-import Image from "next/image";
+import Image from "@/components/ui/app-image";
 import {
 	ScissorIcon,
 	Delete02Icon,
@@ -947,7 +947,6 @@ function StickerElementContent({
 				className="size-4 shrink-0"
 				width={20}
 				height={20}
-				unoptimized
 			/>
 			<span className="truncate text-xs text-white">{element.name}</span>
 		</div>
@@ -971,7 +970,6 @@ function GraphicElementContent({
 				className="size-4 shrink-0"
 				width={20}
 				height={20}
-				unoptimized
 			/>
 			<span className="truncate text-xs text-white">{element.name}</span>
 		</div>

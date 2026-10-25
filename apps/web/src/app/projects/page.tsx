@@ -1,8 +1,8 @@
 "use client";
 
-import Image from "next/image";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import Image from "@/components/ui/app-image";
+import { Link } from "react-router-dom";
+import { useRouter } from "@/hooks/use-router";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -148,7 +148,7 @@ function ProjectsHeader() {
 						<BreadcrumbList>
 							<BreadcrumbItem>
 								<BreadcrumbLink asChild>
-									<Link href="/" className="text-sm sm:text-base">
+									<Link to="/" className="text-sm sm:text-base">
 										Home
 									</Link>
 								</BreadcrumbLink>
@@ -746,7 +746,7 @@ function ProjectItem({
 				className="size-5 shrink-0"
 			/>
 
-			<Link href={`/editor/${project.id}`} className="flex-1 min-w-0">
+			<Link to={`/editor/${project.id}`} className="flex-1 min-w-0">
 				{listRowContent}
 			</Link>
 
@@ -771,7 +771,7 @@ function ProjectItem({
 					<div className="group relative">
 						{isGridView ? (
 							<>
-								<Link href={`/editor/${project.id}`} className="block">
+								<Link to={`/editor/${project.id}`} className="block">
 									{gridContent}
 								</Link>
 

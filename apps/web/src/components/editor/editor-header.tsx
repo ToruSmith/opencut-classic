@@ -9,10 +9,9 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
-import Link from "next/link";
 import { RenameProjectDialog } from "@/project/components/rename-project-dialog";
 import { DeleteProjectDialog } from "@/project/components/delete-project-dialog";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/hooks/use-router";
 import { ExportButton } from "./export-button";
 import { ThemeToggle } from "../theme-toggle";
 import { DEFAULT_LOGO_URL } from "@/site/brand";
@@ -27,7 +26,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ShortcutsDialog } from "@/actions/components/shortcuts-dialog";
-import Image from "next/image";
+import Image from "@/components/ui/app-image";
 import { cn } from "@/utils/ui";
 
 function UndoRedoButtons() {
