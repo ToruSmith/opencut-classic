@@ -1,0 +1,68 @@
+name: WASM size experiment
+
+# 手動觸發:用不同的編譯設定各建一次 WASM,把大小印成註解,用來決定要不要換設定。
+# 不會部署任何東西。
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  size:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "A 原始設定 (無 LTO, opt3)"
+            lto: "false"
+            cgu: "16"
+            opt: "3"
+          - name: "B 目前設定 (LTO, cgu1, opt3)"
+            lto: "true"
+            cgu: "1"
+            opt: "3"
+          - name: "C LTO, cgu1, opt s"
+            lto: "true"
+            cgu: "1"
+            opt: "s"
+          - name: "D LTO, cgu1, opt z"
+            lto: "true"
+            cgu: "1"
+            opt: "z"
+          - name: "E 同 C 但移除 WebGL 後備"
+            lto: "true"
+            cgu: "1"
+            opt: "s"
+            no_webgl: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
+      - name: 移除 WebGL 後備(僅 E)
+        if: matrix.no_webgl == '1'
+        run: sed -i 's|wasm = \["wgpu/webgl"\]|wasm = []|' rust/crates/gpu/Cargo.toml
+
+      - name: Build WASM
+        env:
+          CARGO_PROFILE_RELEASE_LTO: ${{ matrix.lto }}
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.cgu }}
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.opt }}
+        run: .github/scripts/run-step.sh "wasm" wasm-pack build rust/wasm --target bundler --out-dir pkg --release
+
+      - name: 印出大小
+        run: |
+          f=rust/wasm/pkg/opencut_wasm_bg.wasm
+          raw=$(stat -c %s "$f")
+          gz=$(gzip -9 -c "$f" | wc -c)
+          br=$(command -v brotli >/dev/null && brotli -q 9 -c "$f" | wc -c || echo n/a)
+          echo "::notice title=wasm-size::${{ matrix.name }} | raw=$((raw/1024)) KB | gzip=$((gz/1024)) KB | brotli=${br}"
