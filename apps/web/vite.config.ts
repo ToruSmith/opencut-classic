@@ -2,14 +2,13 @@ import { fileURLToPath, URL } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import wasm from "vite-plugin-wasm";
-import topLevelAwait from "vite-plugin-top-level-await";
 
 const r = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
 export default defineConfig({
 	// 相對路徑：放在任何子目錄（例如 GitHub Pages）都能運作
 	base: "./",
-	plugins: [react(), wasm(), topLevelAwait()],
+	plugins: [react(), wasm()],
 	resolve: {
 		alias: [
 			{ find: /^@\//, replacement: `${r("./src")}/` },
@@ -24,7 +23,7 @@ export default defineConfig({
 	},
 	worker: {
 		format: "es",
-		plugins: () => [wasm(), topLevelAwait()],
+		plugins: () => [wasm()],
 	},
 	optimizeDeps: { exclude: ["opencut-wasm"] },
 	build: { target: "esnext", chunkSizeWarningLimit: 4000 },
