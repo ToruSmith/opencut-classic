@@ -8,6 +8,7 @@ export const LANGUAGES = [
 	{ code: "ru", name: "俄文" },
 	{ code: "ja", name: "日文" },
 	{ code: "zh", name: "中文" },
+	{ code: "ko", name: "韓文" },
 ] as const;
 
 export type Language = (typeof LANGUAGES)[number];

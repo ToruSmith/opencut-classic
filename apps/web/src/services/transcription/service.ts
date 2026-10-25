@@ -10,6 +10,8 @@ import {
 } from "@/transcription/models";
 import type { WorkerMessage, WorkerResponse } from "./worker";
 
+export const TRANSCRIPTION_CANCELLED_MESSAGE = "Transcription cancelled";
+
 type ProgressCallback = (progress: TranscriptionProgress) => void;
 
 class TranscriptionService {
@@ -30,6 +32,8 @@ class TranscriptionService {
 		onProgress?: ProgressCallback;
 	}): Promise<TranscriptionResult> {
 		await this.ensureWorker({ modelId, onProgress });
+		// 模型載入完成後立刻切換狀態,不要停在「載入 100%」
+		onProgress?.({ status: "transcribing", progress: 0, message: "辨識中" });
 
 		return new Promise((resolve, reject) => {
 			if (!this.worker) {
@@ -45,7 +49,7 @@ class TranscriptionService {
 						onProgress?.({
 							status: "transcribing",
 							progress: response.progress,
-							message: "Transcribing audio...",
+							message: "辨識中",
 						});
 						break;
 
@@ -65,7 +69,7 @@ class TranscriptionService {
 
 					case "cancelled":
 						this.worker?.removeEventListener("message", handleMessage);
-						reject(new Error("Transcription cancelled"));
+						reject(new Error(TRANSCRIPTION_CANCELLED_MESSAGE));
 						break;
 				}
 			};
@@ -129,7 +133,7 @@ class TranscriptionService {
 						onProgress?.({
 							status: "loading-model",
 							progress: response.progress,
-							message: `Loading ${model.name} model...`,
+							message: `載入「${model.name}」模型`,
 						});
 						break;
 

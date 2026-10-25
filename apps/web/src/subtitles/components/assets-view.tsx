@@ -18,7 +18,10 @@ import type {
 	TranscriptionLanguage,
 	TranscriptionProgress,
 } from "@/transcription/types";
-import { transcriptionService } from "@/services/transcription/service";
+import {
+	TRANSCRIPTION_CANCELLED_MESSAGE,
+	transcriptionService,
+} from "@/services/transcription/service";
 import { decodeAudioToFloat32 } from "@/media/audio";
 import { buildCaptionChunks } from "@/transcription/caption";
 import { insertCaptionChunksAsTextTrack } from "@/subtitles/insert";
@@ -56,6 +59,7 @@ type ProcessingAction =
 	| { type: "start"; step: string }
 	| { type: "update_step"; step: string }
 	| { type: "succeed"; warnings: string[] }
+	| { type: "cancelled" }
 	| { type: "fail"; error: string };
 
 const IDLE_STATE: ProcessingState = {
@@ -77,6 +81,8 @@ function processingReducer(
 			return { status: "processing", step: action.step };
 		case "succeed":
 			return { status: "idle", error: null, warnings: action.warnings };
+		case "cancelled":
+			return IDLE_STATE;
 		case "fail":
 			return { status: "idle", error: action.error, warnings: [] };
 	}
@@ -85,7 +91,9 @@ function processingReducer(
 
 export function Captions() {
 	const [selectedLanguage, setSelectedLanguage] =
-		useState<TranscriptionLanguage>("auto");
+		useState<TranscriptionLanguage>("zh");
+	// 只有辨識進行中才能取消(載入模型階段沒有東西可以中止)
+	const [canCancel, setCanCancel] = useState(false);
 	const [processing, dispatch] = useReducer(processingReducer, IDLE_STATE);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
@@ -99,12 +107,17 @@ export function Captions() {
 
 	const handleProgress = (progress: TranscriptionProgress) => {
 		if (progress.status === "loading-model") {
+			setCanCancel(false);
 			dispatch({
 				type: "update_step",
-				step: `Loading model ${Math.round(progress.progress)}%`,
+				step: `載入模型 ${Math.round(progress.progress)}%(第一次需要下載)`,
 			});
 		} else if (progress.status === "transcribing") {
-			dispatch({ type: "update_step", step: "Transcribing..." });
+			setCanCancel(true);
+			dispatch({
+				type: "update_step",
+				step: `辨識中 ${Math.round(progress.progress)}%`,
+			});
 		}
 	};
 
@@ -118,7 +131,7 @@ export function Captions() {
 	};
 
 	const handleGenerateTranscript = async () => {
-		dispatch({ type: "start", step: "Extracting audio..." });
+		dispatch({ type: "start", step: "擷取音訊…" });
 		try {
 			const audioBlob = await extractTimelineAudio({
 				tracks: editor.scenes.getActiveScene().tracks,
@@ -126,7 +139,7 @@ export function Captions() {
 				totalDuration: editor.timeline.getTotalDuration(),
 			});
 
-			dispatch({ type: "update_step", step: "Preparing audio..." });
+			dispatch({ type: "update_step", step: "準備音訊…" });
 			const { samples } = await decodeAudioToFloat32({
 				audioBlob,
 				sampleRate: DEFAULT_TRANSCRIPTION_SAMPLE_RATE,
@@ -134,28 +147,41 @@ export function Captions() {
 
 			const result = await transcriptionService.transcribe({
 				audioData: samples,
-				language: selectedLanguage === "auto" ? undefined : selectedLanguage,
+				language: selectedLanguage,
 				onProgress: handleProgress,
 			});
 
-			dispatch({ type: "update_step", step: "Generating captions..." });
+			setCanCancel(false);
+			dispatch({ type: "update_step", step: "產生字幕中…" });
 			const captionChunks = buildCaptionChunks({ segments: result.segments });
 
 			if (!insertCaptions({ captions: captionChunks })) {
-				dispatch({ type: "fail", error: "No captions were generated" });
+				dispatch({
+					type: "fail",
+					error: "沒有辨識出任何字幕。可能整段都沒有說話聲,或語言選得不對。",
+				});
 				return;
 			}
 
 			dispatch({ type: "succeed", warnings: [] });
 		} catch (error) {
+			if (
+				error instanceof Error &&
+				error.message === TRANSCRIPTION_CANCELLED_MESSAGE
+			) {
+				dispatch({ type: "cancelled" });
+				return;
+			}
 			console.error("Transcription failed:", error);
 			dispatch({
 				type: "fail",
 				error:
 					error instanceof Error
-						? error.message
-						: "An unexpected error occurred",
+						? `辨識失敗:${error.message}`
+						: "發生未知的錯誤",
 			});
+		} finally {
+			setCanCancel(false);
 		}
 	};
 
@@ -164,7 +190,7 @@ export function Captions() {
 	};
 
 	const handleImportFile = async ({ file }: { file: File }) => {
-		dispatch({ type: "start", step: "Reading subtitle file..." });
+		dispatch({ type: "start", step: "讀取字幕檔…" });
 		try {
 			const input = await file.text();
 			const result = parseSubtitleFile({
@@ -175,22 +201,22 @@ export function Captions() {
 			if (result.captions.length === 0) {
 				dispatch({
 					type: "fail",
-					error: "No valid subtitle cues were found in the subtitle file",
+					error: "字幕檔裡沒有找到有效的字幕",
 				});
 				return;
 			}
 
-			dispatch({ type: "update_step", step: "Importing subtitles..." });
+			dispatch({ type: "update_step", step: "匯入字幕…" });
 
 			if (!insertCaptions({ captions: result.captions })) {
-				dispatch({ type: "fail", error: "No captions were generated" });
+				dispatch({ type: "fail", error: "沒有匯入任何字幕" });
 				return;
 			}
 
 			const nextWarnings = [...result.warnings];
 			if (result.skippedCueCount > 0) {
 				nextWarnings.unshift(
-					`Imported ${result.captions.length} subtitle cue(s) and skipped ${result.skippedCueCount} malformed cue(s).`,
+					`已匯入 ${result.captions.length} 則字幕,略過 ${result.skippedCueCount} 則格式不正確的字幕。`,
 				);
 			}
 
@@ -201,8 +227,10 @@ export function Captions() {
 				type: "fail",
 				error:
 					error instanceof Error
-						? error.message
-						: "An unexpected error occurred",
+						? error.message === "Unsupported subtitle format"
+							? "不支援的字幕格式(只支援 .srt 與 .ass)"
+							: error.message
+						: "發生未知的錯誤",
 			});
 		}
 	};
@@ -289,7 +317,7 @@ export function Captions() {
 			>
 				<SectionContent className="flex flex-col gap-4 h-full pt-1">
 					<SectionFields>
-						<SectionField label="語言">
+						<SectionField label="影片的語言">
 							<Select
 								value={selectedLanguage}
 								onValueChange={(value) => handleLanguageChange({ value })}
@@ -298,7 +326,6 @@ export function Captions() {
 									<SelectValue placeholder="選擇語言" />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="auto">自動偵測</SelectItem>
 									{TRANSCRIPTION_LANGUAGES.map((language) => (
 										<SelectItem key={language.code} value={language.code}>
 											{language.name}
@@ -309,15 +336,27 @@ export function Captions() {
 						</SectionField>
 					</SectionFields>
 
-					<Button
-						type="button"
-						className="mt-auto w-full"
-						onClick={handleGenerateTranscript}
-						disabled={isProcessing || activeDiagnostics.length > 0}
-					>
-						{isProcessing && <Spinner className="mr-1" />}
-						{isProcessing ? processing.step : "Generate transcript"}
-					</Button>
+					<div className="mt-auto flex w-full flex-col gap-2">
+						<Button
+							type="button"
+							className="w-full"
+							onClick={handleGenerateTranscript}
+							disabled={isProcessing || activeDiagnostics.length > 0}
+						>
+							{isProcessing && <Spinner className="mr-1" />}
+							{isProcessing ? processing.step : "語音轉文字(產生字幕)"}
+						</Button>
+						{canCancel && (
+							<Button
+								type="button"
+								variant="outline"
+								className="w-full"
+								onClick={() => transcriptionService.cancel()}
+							>
+								取消
+							</Button>
+						)}
+					</div>
 					{error && (
 						<div className="bg-destructive/10 border-destructive/20 rounded-md border p-3">
 							<p className="text-destructive text-sm">{error}</p>

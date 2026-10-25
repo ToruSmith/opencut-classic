@@ -7,7 +7,10 @@ import type { TranscriptionSegment } from "@/transcription/types";
 import {
 	DEFAULT_CHUNK_LENGTH_SECONDS,
 	DEFAULT_STRIDE_SECONDS,
+	DEFAULT_TRANSCRIPTION_SAMPLE_RATE,
 } from "@/transcription/audio";
+import { cleanSegments } from "@/transcription/segments";
+import { isWindowSilent, planWindows } from "@/transcription/windows";
 
 export type WorkerMessage =
 	| { type: "init"; modelId: string }
@@ -28,7 +31,8 @@ export type WorkerResponse =
 	| { type: "cancelled" };
 
 let transcriber: AutomaticSpeechRecognitionPipeline | null = null;
-let cancelled = false;
+/** 每次辨識遞增;取消時也遞增,讓舊的那一輪在下一個視窗前自行結束 */
+let currentRun = 0;
 let lastReportedProgress = -1;
 const fileBytes = new Map<string, { loaded: number; total: number }>();
 
@@ -46,7 +50,7 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 			});
 			break;
 		case "cancel":
-			cancelled = true;
+			currentRun += 1;
 			self.postMessage({ type: "cancelled" } satisfies WorkerResponse);
 			break;
 	}
@@ -131,43 +135,69 @@ async function handleTranscribe({
 		return;
 	}
 
-	cancelled = false;
+	currentRun += 1;
+	const run = currentRun;
+	const isCancelled = () => run !== currentRun;
+	const sampleRate = DEFAULT_TRANSCRIPTION_SAMPLE_RATE;
 
 	try {
-		const rawResult = await transcriber(audio, {
-			chunk_length_s: DEFAULT_CHUNK_LENGTH_SECONDS,
-			stride_length_s: DEFAULT_STRIDE_SECONDS,
-			language: language === "auto" ? undefined : language,
-			return_timestamps: true,
-		});
-
-		if (cancelled) return;
-
-		const result: AutomaticSpeechRecognitionOutput = Array.isArray(rawResult)
-			? rawResult[0]
-			: rawResult;
-
+		const windows = planWindows({ samples: audio, sampleRate });
 		const segments: TranscriptionSegment[] = [];
 
-		if (result.chunks) {
-			for (const chunk of result.chunks) {
-				if (chunk.timestamp && chunk.timestamp.length >= 2) {
+		for (let index = 0; index < windows.length; index++) {
+			if (isCancelled()) return;
+
+			const window = windows[index];
+			if (!isWindowSilent({ samples: audio, window })) {
+				const offsetSeconds = window.start / sampleRate;
+				const windowSeconds = (window.end - window.start) / sampleRate;
+
+				const rawResult = await transcriber(
+					audio.subarray(window.start, window.end),
+					{
+						chunk_length_s: DEFAULT_CHUNK_LENGTH_SECONDS,
+						stride_length_s: DEFAULT_STRIDE_SECONDS,
+						// transformers.js 沒指定語言時會直接當英文處理,並不會自動偵測
+						language: language === "auto" ? undefined : language,
+						task: "transcribe",
+						return_timestamps: true,
+					},
+				);
+				if (isCancelled()) return;
+
+				const result: AutomaticSpeechRecognitionOutput = Array.isArray(
+					rawResult,
+				)
+					? rawResult[0]
+					: rawResult;
+
+				for (const chunk of result.chunks ?? []) {
+					if (!chunk.timestamp || chunk.timestamp.length < 1) continue;
+					const start = chunk.timestamp[0] ?? 0;
+					// 最後一段的結束時間可能是 null:用視窗尾端代替
+					const end = chunk.timestamp[1] ?? windowSeconds;
 					segments.push({
 						text: chunk.text,
-						start: chunk.timestamp[0] ?? 0,
-						end: chunk.timestamp[1] ?? chunk.timestamp[0] ?? 0,
+						start: offsetSeconds + start,
+						end: offsetSeconds + Math.max(end, start),
 					});
 				}
 			}
+
+			self.postMessage({
+				type: "transcribe-progress",
+				progress: Math.round(((index + 1) / windows.length) * 100),
+			} satisfies WorkerResponse);
 		}
 
+		const cleaned = cleanSegments({ segments });
 		self.postMessage({
 			type: "transcribe-complete",
-			text: result.text,
-			segments,
+			text: cleaned.map((segment) => segment.text).join(" "),
+			segments: cleaned,
 		} satisfies WorkerResponse);
 	} catch (error) {
-		if (cancelled) return;
+		if (isCancelled()) return;
 		self.postMessage({
 			type: "transcribe-error",
 			error: error instanceof Error ? error.message : "Transcription failed",
