@@ -7,6 +7,12 @@ import {
 	sepiaEffectDefinition,
 	vignetteEffectDefinition,
 } from "./color";
+import {
+	coolLookEffectDefinition,
+	filmFadeLookEffectDefinition,
+	toneEffectDefinition,
+	warmLookEffectDefinition,
+} from "./tone";
 
 const defaultEffects = [
 	blurEffectDefinition,
@@ -15,6 +21,10 @@ const defaultEffects = [
 	grayscaleEffectDefinition,
 	sepiaEffectDefinition,
 	vignetteEffectDefinition,
+	toneEffectDefinition,
+	warmLookEffectDefinition,
+	coolLookEffectDefinition,
+	filmFadeLookEffectDefinition,
 ];
 
 export function registerDefaultEffects(): void {

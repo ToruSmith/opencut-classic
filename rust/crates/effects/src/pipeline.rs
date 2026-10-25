@@ -11,6 +11,8 @@ const GAUSSIAN_BLUR_SHADER_ID: &str = "gaussian-blur";
 const GAUSSIAN_BLUR_SHADER_SOURCE: &str = include_str!("shaders/gaussian_blur.wgsl");
 const COLOR_GRADE_SHADER_ID: &str = "color-grade";
 const COLOR_GRADE_SHADER_SOURCE: &str = include_str!("shaders/color_grade.wgsl");
+const TONE_SHADER_ID: &str = "tone";
+const TONE_SHADER_SOURCE: &str = include_str!("shaders/tone.wgsl");
 const CHROMA_KEY_SHADER_ID: &str = "chroma-key";
 const CHROMA_KEY_SHADER_SOURCE: &str = include_str!("shaders/chroma_key.wgsl");
 
@@ -144,6 +146,10 @@ impl EffectPipeline {
             (
                 COLOR_GRADE_SHADER_ID.to_string(),
                 build_pipeline("effects-color-grade", COLOR_GRADE_SHADER_SOURCE),
+            ),
+            (
+                TONE_SHADER_ID.to_string(),
+                build_pipeline("effects-tone", TONE_SHADER_SOURCE),
             ),
             (
                 CHROMA_KEY_SHADER_ID.to_string(),
@@ -314,6 +320,38 @@ fn pack_effect_uniforms(
                 read_number_uniform(pass, "u_contrast")?,
                 read_number_uniform(pass, "u_saturation")?,
                 read_number_uniform(pass, "u_hue")?,
+            ],
+        });
+    }
+
+    if shader == TONE_SHADER_ID {
+        const KNOWN: [&str; 6] = [
+            "u_temperature",
+            "u_tint",
+            "u_shadows",
+            "u_highlights",
+            "u_exposure",
+            "u_fade",
+        ];
+        for uniform in pass.uniforms.keys() {
+            if !KNOWN.contains(&uniform.as_str()) {
+                return Err(EffectsError::UnsupportedUniform {
+                    shader: shader.to_string(),
+                    uniform: uniform.clone(),
+                });
+            }
+        }
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [
+                read_number_uniform(pass, "u_exposure")?,
+                read_number_uniform(pass, "u_fade")?,
+            ],
+            scalars: [
+                read_number_uniform(pass, "u_temperature")?,
+                read_number_uniform(pass, "u_tint")?,
+                read_number_uniform(pass, "u_shadows")?,
+                read_number_uniform(pass, "u_highlights")?,
             ],
         });
     }

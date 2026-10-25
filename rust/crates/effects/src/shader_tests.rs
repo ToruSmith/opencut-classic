@@ -8,6 +8,7 @@ use naga::valid::{Capabilities, ValidationFlags, Validator};
 const SHADERS: &[(&str, &str)] = &[
     ("gaussian_blur", include_str!("shaders/gaussian_blur.wgsl")),
     ("color_grade", include_str!("shaders/color_grade.wgsl")),
+    ("tone", include_str!("shaders/tone.wgsl")),
     ("chroma_key", include_str!("shaders/chroma_key.wgsl")),
 ];
 
