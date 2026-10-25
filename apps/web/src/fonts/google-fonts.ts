@@ -3,7 +3,6 @@ import { SYSTEM_FONTS } from "@/fonts/system-fonts";
 
 const GOOGLE_FONTS_CSS = "https://fonts.googleapis.com/css2";
 const FONT_ATLAS_PATH = `${import.meta.env.BASE_URL}fonts/font-atlas.json`;
-const FONT_CHUNK_PATH_PREFIX = `${import.meta.env.BASE_URL}fonts/font-chunk-`;
 
 const fullLoaded = new Set<string>();
 
@@ -33,23 +32,12 @@ export function loadFontAtlas(): Promise<FontAtlas | null> {
 			if (!response.ok) return null;
 			const data: FontAtlas = await response.json();
 			cachedAtlas = data;
-			preloadChunkImages({ atlas: data });
+			// 雪碧圖(font-chunk-N.avif)由列表渲染到該列時才由瀏覽器抓取,不在這裡全部預載
 			return data;
 		})
 		.catch(() => null);
 
 	return atlasFetchPromise;
-}
-
-function preloadChunkImages({ atlas }: { atlas: FontAtlas }): void {
-	const maxChunk = Math.max(
-		...Object.values(atlas.fonts).map((entry) => entry.ch),
-	);
-	for (let i = 0; i <= maxChunk; i++) {
-		// hint browser to preload chunk images without blocking
-		const img = new Image();
-		img.src = `${FONT_CHUNK_PATH_PREFIX}${i}.avif`;
-	}
 }
 
 export async function loadFullFont({
