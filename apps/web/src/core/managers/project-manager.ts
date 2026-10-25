@@ -233,6 +233,46 @@ export class ProjectManager {
 		return result;
 	}
 
+	/** 匯出專案備份檔(含專案內容與所有素材) */
+	async exportBackup({ id, name }: { id: string; name: string }): Promise<void> {
+		if (this.active?.metadata.id === id) {
+			await this.saveCurrentProject();
+		}
+		const blob = await storageService.exportProjectBundle({ id });
+		const filename = `${name}.opencut-backup`;
+		const picker = (
+			window as unknown as {
+				showSaveFilePicker?: (options: unknown) => Promise<FileSystemFileHandle>;
+			}
+		).showSaveFilePicker;
+		if (picker) {
+			try {
+				const handle = await picker.call(window, { suggestedName: filename });
+				const writable = await handle.createWritable();
+				await writable.write(blob);
+				await writable.close();
+				return;
+			} catch (error) {
+				if (error instanceof DOMException && error.name === "AbortError") return;
+				console.warn("直接寫檔失敗,改用一般下載", error);
+			}
+		}
+		const url = URL.createObjectURL(blob);
+		const anchor = document.createElement("a");
+		anchor.href = url;
+		anchor.download = filename;
+		anchor.click();
+		setTimeout(() => URL.revokeObjectURL(url), 60_000);
+	}
+
+	/** 從備份檔建立新專案,回傳新專案 ID */
+	async importBackup({ file }: { file: File }): Promise<string> {
+		const id = await storageService.importProjectBundle({ file });
+		this.savedProjects = await storageService.loadAllProjectsMetadata();
+		this.notify();
+		return id;
+	}
+
 	cancelExport(): void {
 		this.exportCancelRequested = true;
 	}

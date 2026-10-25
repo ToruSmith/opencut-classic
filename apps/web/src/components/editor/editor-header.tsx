@@ -13,14 +13,13 @@ import Link from "next/link";
 import { RenameProjectDialog } from "@/project/components/rename-project-dialog";
 import { DeleteProjectDialog } from "@/project/components/delete-project-dialog";
 import { useRouter } from "next/navigation";
-import { FaDiscord } from "react-icons/fa6";
 import { ExportButton } from "./export-button";
 import { ThemeToggle } from "../theme-toggle";
 import { DEFAULT_LOGO_URL } from "@/site/brand";
-import { SOCIAL_LINKS } from "@/site/social";
 import { toast } from "sonner";
 import { useEditor } from "@/editor/use-editor";
 import {
+	Download01Icon,
 	ArrowTurnBackwardIcon,
 	ArrowTurnForwardIcon,
 	CommandIcon,
@@ -164,19 +163,27 @@ function ProjectDropdown() {
 						onClick={() => setOpenDialog("shortcuts")}
 						icon={<HugeiconsIcon icon={CommandIcon} />}
 					>
-						Shortcuts
+						鍵盤快速鍵
 					</DropdownMenuItem>
 
-					<DropdownMenuSeparator />
-
-					<DropdownMenuItem asChild icon={<FaDiscord className="size-4!" />}>
-						<Link
-							href={SOCIAL_LINKS.discord}
-							target="_blank"
-							rel="noopener noreferrer"
-						>
-							Discord
-						</Link>
+					<DropdownMenuItem
+						onClick={async () => {
+							if (!activeProject) return;
+							try {
+								await editor.project.exportBackup({
+									id: activeProject.metadata.id,
+									name: activeProject.metadata.name,
+								});
+							} catch (error) {
+								toast.error("匯出備份失敗", {
+									description:
+										error instanceof Error ? error.message : undefined,
+								});
+							}
+						}}
+						icon={<HugeiconsIcon icon={Download01Icon} />}
+					>
+						匯出備份
 					</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>

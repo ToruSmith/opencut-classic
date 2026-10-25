@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { KeyboardEvent, MouseEvent } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { EditorCore } from "@/core";
 import { MigrationDialog } from "@/project/components/migration-dialog";
@@ -42,6 +42,7 @@ import {
 	MoreHorizontalIcon,
 	Delete02Icon,
 	Copy01Icon,
+	Download01Icon,
 	Edit03Icon,
 	ArrowDown02Icon,
 	InformationCircleIcon,
@@ -182,6 +183,7 @@ function ProjectsHeader() {
 
 				<div className="flex items-center gap-3 md:gap-4">
 					<SearchBar className="hidden md:block" />
+					<ImportBackupButton />
 					<NewProjectButton />
 				</div>
 			</div>
@@ -349,6 +351,12 @@ const PROJECT_ACTIONS = [
 		variant: "outline" as const,
 	},
 	{
+		id: "backup",
+		label: "匯出備份",
+		icon: Download01Icon,
+		variant: "outline" as const,
+	},
+	{
 		id: "delete",
 		label: "刪除",
 		icon: Delete02Icon,
@@ -413,7 +421,22 @@ function ProjectActions() {
 		setIsDeleteDialogOpen(false);
 	};
 
+	const handleBackup = async () => {
+		for (const project of savedProjects.filter((p) =>
+			selectedProjectIds.includes(p.id),
+		)) {
+			try {
+				await editor.project.exportBackup({ id: project.id, name: project.name });
+			} catch (error) {
+				toast.error("匯出備份失敗", {
+					description: error instanceof Error ? error.message : undefined,
+				});
+			}
+		}
+	};
+
 	const actionHandlers: Record<string, () => void> = {
+		backup: handleBackup,
 		duplicate: handleDuplicate,
 		delete: handleDeleteClick,
 	};
@@ -499,6 +522,48 @@ function SortDropdown({ children }: { children: React.ReactNode }) {
 				</DropdownMenuCheckboxItem>
 			</DropdownMenuContent>
 		</DropdownMenu>
+	);
+}
+
+function ImportBackupButton() {
+	const editor = useEditor();
+	const inputRef = useRef<HTMLInputElement>(null);
+
+	const handleFile = async (file: File | undefined) => {
+		if (!file) return;
+		const toastId = toast.loading("匯入備份中…");
+		try {
+			await editor.project.importBackup({ file });
+			toast.success("備份已匯入為新專案", { id: toastId });
+		} catch (error) {
+			toast.error("匯入失敗", {
+				id: toastId,
+				description: error instanceof Error ? error.message : "請再試一次",
+			});
+		}
+	};
+
+	return (
+		<>
+			<input
+				ref={inputRef}
+				type="file"
+				accept=".opencut-backup"
+				className="hidden"
+				onChange={(e) => {
+					void handleFile(e.target.files?.[0]);
+					e.target.value = "";
+				}}
+			/>
+			<Button
+				size="lg"
+				variant="outline"
+				className="flex px-5 md:px-6"
+				onClick={() => inputRef.current?.click()}
+			>
+				<span className="text-sm font-medium">匯入備份</span>
+			</Button>
+		</>
 	);
 }
 

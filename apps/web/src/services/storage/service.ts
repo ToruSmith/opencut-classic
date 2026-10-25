@@ -558,6 +558,112 @@ class StorageService {
 		}
 	}
 
+	/**
+	 * 備份檔格式:[8 bytes 標頭長度][JSON 標頭][素材檔案 1][素材檔案 2]...
+	 * 以 Blob 串接,檔案內容不會被整個讀進記憶體。
+	 */
+	async exportProjectBundle({ id }: { id: string }): Promise<Blob> {
+		await this.ensureMigrations();
+		const project = await this.projectsAdapter.get(id);
+		if (!project) throw new Error("找不到專案");
+
+		const { mediaMetadataAdapter, mediaAssetsAdapter } =
+			this.getProjectMediaAdapters({ projectId: id });
+		const mediaIds = await mediaMetadataAdapter.list();
+
+		const media: Array<{ metadata: MediaAssetData; size: number; mime: string }> = [];
+		const parts: BlobPart[] = [];
+		for (const mediaId of mediaIds) {
+			const [file, metadata] = await Promise.all([
+				mediaAssetsAdapter.get(mediaId),
+				mediaMetadataAdapter.get(mediaId),
+			]);
+			if (!file || !metadata) continue;
+			media.push({ metadata, size: file.size, mime: file.type });
+			parts.push(file);
+		}
+
+		const header = new TextEncoder().encode(
+			JSON.stringify({
+				format: "opencut-slim-backup",
+				version: 1,
+				exportedAt: new Date().toISOString(),
+				project,
+				media,
+			}),
+		);
+		const lengthBytes = new Uint8Array(8);
+		new DataView(lengthBytes.buffer).setBigUint64(0, BigInt(header.length));
+		return new Blob([lengthBytes, header, ...parts], {
+			type: "application/octet-stream",
+		});
+	}
+
+	/** 匯入備份檔,一律建立為新專案(不會覆蓋現有專案),回傳新專案 ID */
+	async importProjectBundle({ file }: { file: Blob }): Promise<string> {
+		await this.ensureMigrations();
+		const lengthView = new DataView(await file.slice(0, 8).arrayBuffer());
+		const headerLength = Number(lengthView.getBigUint64(0));
+		if (!Number.isFinite(headerLength) || headerLength <= 0 || headerLength > file.size) {
+			throw new Error("這不是有效的備份檔");
+		}
+		const header = JSON.parse(
+			await file.slice(8, 8 + headerLength).text(),
+		) as {
+			format?: string;
+			project?: SerializedProject;
+			media?: Array<{ metadata: MediaAssetData; size: number; mime: string }>;
+		};
+		if (header.format !== "opencut-slim-backup" || !header.project || !header.media) {
+			throw new Error("這不是有效的備份檔");
+		}
+
+		const newId = crypto.randomUUID();
+		const { mediaMetadataAdapter, mediaAssetsAdapter } =
+			this.getProjectMediaAdapters({ projectId: newId });
+
+		try {
+			let offset = 8 + headerLength;
+			for (const item of header.media) {
+				const slice = file.slice(offset, offset + item.size, item.mime);
+				offset += item.size;
+				const restored = new File([slice], item.metadata.name, {
+					type: item.mime,
+					lastModified: item.metadata.lastModified,
+				});
+				await mediaAssetsAdapter.set({ key: item.metadata.id, value: restored });
+				await mediaMetadataAdapter.set({
+					key: item.metadata.id,
+					value: item.metadata,
+				});
+			}
+
+			const now = new Date().toISOString();
+			await this.projectsAdapter.set({
+				key: newId,
+				value: {
+					...header.project,
+					metadata: {
+						...header.project.metadata,
+						id: newId,
+						name: `${header.project.metadata.name} (匯入)`,
+						updatedAt: now,
+					},
+				},
+			});
+		} catch (error) {
+			await Promise.all([
+				mediaMetadataAdapter.clear(),
+				mediaAssetsAdapter.clear(),
+			]).catch(() => {});
+			if (this.isQuotaExceededError({ error })) {
+				throw new Error("瀏覽器儲存空間不足,無法匯入");
+			}
+			throw error;
+		}
+		return newId;
+	}
+
 	isOPFSSupported(): boolean {
 		return OPFSAdapter.isSupported();
 	}
