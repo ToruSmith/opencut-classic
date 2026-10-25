@@ -12,6 +12,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { storageService } from "@/services/storage/service";
 import { useEditor } from "@/editor/use-editor";
+import {
+	disableOfflineMode,
+	enableOfflineMode,
+	isOfflineModeEnabled,
+} from "@/services/offline-mode";
 
 function formatBytes(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
@@ -56,6 +61,7 @@ export function StorageDialog({
 }) {
 	const editor = useEditor();
 	const [data, setData] = useState<Usage | null>(null);
+	const [offlineOn, setOfflineOn] = useState(isOfflineModeEnabled());
 	const [online, setOnline] = useState(
 		typeof navigator === "undefined" ? true : navigator.onLine,
 	);
@@ -117,6 +123,23 @@ export function StorageDialog({
 		if (isOpen) void refresh();
 	}, [isOpen, refresh]);
 
+	const toggleOffline = async () => {
+		try {
+			if (offlineOn) {
+				await disableOfflineMode();
+				setOfflineOn(false);
+				toast.success("已關閉離線模式", { description: "離線快取已清除,專案與素材不受影響。" });
+			} else {
+				await enableOfflineMode();
+				setOfflineOn(true);
+				toast.success("已開啟離線模式", { description: "下次連線開啟時會建立快取,之後斷網也能使用。" });
+			}
+		} catch (error) {
+			toast.error("切換失敗", { description: error instanceof Error ? error.message : undefined });
+		}
+		await refresh();
+	};
+
 	const clearOfflineCache = async () => {
 		for (const name of await caches.keys()) await caches.delete(name);
 		for (const r of (await navigator.serviceWorker?.getRegistrations?.()) ?? []) {
@@ -150,6 +173,24 @@ export function StorageDialog({
 							className={`size-2 rounded-full ${online ? "bg-green-500" : "bg-amber-500"}`}
 						/>
 						{online ? "目前:已連線" : "目前:離線中(使用本機快取)"}
+					</div>
+
+					<div className="flex items-center justify-between gap-4 rounded-md border p-3">
+						<div className="flex flex-col">
+							<span className="text-sm font-medium">離線模式</span>
+							<span className="text-muted-foreground text-xs">
+								{offlineOn
+									? "已開啟:斷網也能開啟剪輯台"
+									: "已關閉:每次都從網路載入,不在本機存程式快取"}
+							</span>
+						</div>
+						<Button
+							size="sm"
+							variant={offlineOn ? "outline" : "default"}
+							onClick={toggleOffline}
+						>
+							{offlineOn ? "關閉" : "開啟"}
+						</Button>
 					</div>
 
 					{!data ? (

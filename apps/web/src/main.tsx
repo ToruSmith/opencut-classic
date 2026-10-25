@@ -1,5 +1,6 @@
 import "@fontsource-variable/inter";
 import "@fontsource-variable/noto-sans-tc";
+import { syncOfflineMode } from "@/services/offline-mode";
 import "./app/globals.css";
 
 import { StrictMode } from "react";
@@ -36,11 +37,5 @@ createRoot(root).render(
 	</StrictMode>,
 );
 
-// 離線使用:註冊 Service Worker(僅正式站)
-if ("serviceWorker" in navigator && import.meta.env.PROD) {
-	window.addEventListener("load", () => {
-		navigator.serviceWorker
-			.register(`${import.meta.env.BASE_URL}sw.js`)
-			.catch((error) => console.warn("Service Worker 註冊失敗", error));
-	});
-}
+// 離線模式:預設關閉,可在「儲存空間」視窗開啟
+syncOfflineMode();

@@ -54,4 +54,4 @@ MIT 授權，原始碼來自 OpenCut，著作權屬原作者，詳見 [LICENSE](
 - 定格(freeze frame)、復原/重做按鈕
 - 匯出直接串流寫入硬碟(Chrome / Edge)
 - 專案備份檔(`.opencut-backup`)匯出與匯入
-- 離線使用(Service Worker):第一次連線後,斷網也能開啟
+- 離線模式(預設關閉,可在「儲存空間」視窗開啟)
