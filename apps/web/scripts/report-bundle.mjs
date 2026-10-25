@@ -18,7 +18,7 @@ const walk = (dir) => {
 walk(root);
 
 const compressible = /\.(js|mjs|css|html|json|svg|wasm|txt)$/;
-const rows = files.map((path) => {
+const rows = files.filter((path) => !path.endsWith(".map")).map((path) => {
 	const data = readFileSync(path);
 	const gzip = compressible.test(path) ? gzipSync(data).length : data.length;
 	return { name: relative(root, path), size: data.length, gzip };
@@ -39,6 +39,81 @@ const lines = [
 	`${"raw KB".padStart(9)} ${"gzip KB".padStart(9)}  檔案(依 gzip 由大到小,前 ${limit} 個)`,
 	...rows.slice(0, limit).map((r) => `${kb(r.size)} ${kb(r.gzip)}  ${r.name}`),
 ];
+
+// ---- 以 sourcemap 估算各 chunk 內「是誰佔了多少位元組」(需用 BUNDLE_ANALYZE=1 建置) ----
+const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const B64_INDEX = new Map([...B64].map((char, index) => [char, index]));
+
+function decodeVlq(text, start, out) {
+	let shift = 0;
+	let value = 0;
+	let index = start;
+	for (;;) {
+		const digit = B64_INDEX.get(text[index++]);
+		value += (digit & 31) << shift;
+		if (!(digit & 32)) break;
+		shift += 5;
+	}
+	out.push(value & 1 ? -(value >> 1) : value >> 1);
+	return index;
+}
+
+function groupOf(source) {
+	const marker = source.lastIndexOf("node_modules/");
+	if (marker !== -1) {
+		const rest = source.slice(marker + "node_modules/".length).split("/");
+		return rest[0].startsWith("@") ? `${rest[0]}/${rest[1]}` : rest[0];
+	}
+	const srcMarker = source.lastIndexOf("/src/");
+	const path = srcMarker !== -1 ? source.slice(srcMarker + 5) : source;
+	return `src/${path.split("/").slice(0, 2).join("/")}`;
+}
+
+function attribute(jsPath) {
+	const mapPath = `${jsPath}.map`;
+	let map;
+	try {
+		map = JSON.parse(readFileSync(mapPath, "utf8"));
+	} catch {
+		return null;
+	}
+	const code = readFileSync(jsPath, "utf8").split("\n");
+	const groups = new Map();
+	const add = (source, bytes) => {
+		if (bytes <= 0) return;
+		const key = source === undefined ? "(未對應)" : groupOf(map.sources[source]);
+		groups.set(key, (groups.get(key) ?? 0) + bytes);
+	};
+	let source = 0;
+	map.mappings.split(";").forEach((line, lineIndex) => {
+		let column = 0;
+		const text = code[lineIndex] ?? "";
+		const segments = line ? line.split(",") : [];
+		let previous = null;
+		for (const segment of segments) {
+			const fields = [];
+			let cursor = 0;
+			while (cursor < segment.length) cursor = decodeVlq(segment, cursor, fields);
+			column += fields[0];
+			if (fields.length > 1) source += fields[1];
+			if (previous) add(previous.source, column - previous.column);
+			previous = { column, source: fields.length > 1 ? source : undefined };
+		}
+		if (previous) add(previous.source, text.length - previous.column);
+	});
+	return [...groups.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+const analysis = [];
+for (const row of rows.filter((r) => r.name.endsWith(".js")).slice(0, 4)) {
+	const groups = attribute(join(root, row.name));
+	if (!groups) continue;
+	analysis.push("", `── ${row.name}(${(row.size / 1024).toFixed(0)} KB)內容佔比 ──`);
+	for (const [name, bytes] of groups.slice(0, 28)) {
+		analysis.push(`${(bytes / 1024).toFixed(1).padStart(9)} KB  ${name}`);
+	}
+}
+lines.push(...analysis);
 
 console.log(lines.join("\n"));
 

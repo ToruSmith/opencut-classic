@@ -34,6 +34,8 @@ jobs:
 
       - name: Build
         working-directory: apps/web
+        env:
+          BUNDLE_ANALYZE: "1"
         run: ../../.github/scripts/run-step.sh "build" bun run build
 
       - name: Bundle report
