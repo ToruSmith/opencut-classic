@@ -1,9 +1,11 @@
 name: WASM size experiment
 
-# 手動觸發:用不同的編譯設定各建一次 WASM,把大小印成註解,用來決定要不要換設定。
-# 不會部署任何東西。
+# 用不同的編譯設定各建一次 WASM,把大小印成註解,用來決定要不要換設定。
+# 不會部署任何東西。只有修改這個檔案的那次推送才會執行(要重跑就改一下檔案)。
 on:
-  workflow_dispatch:
+  push:
+    branches: [slim]
+    paths: [".github/workflows/wasm-size.yml"]
 
 permissions:
   contents: read
