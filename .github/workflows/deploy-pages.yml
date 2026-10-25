@@ -28,11 +28,28 @@ jobs:
         with:
           bun-version: 1.2.18
 
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
+      - name: Build WASM (custom shaders)
+        run: .github/scripts/run-step.sh "wasm" wasm-pack build rust/wasm --target bundler --out-dir pkg --release
+
       - name: Install
         run: .github/scripts/run-step.sh "install" bun install
 
       - name: Build
         working-directory: apps/web
+        env:
+          OPENCUT_WASM_LOCAL: "1"
         run: ../../.github/scripts/run-step.sh "build" bun run build
 
       - uses: actions/configure-pages@v5

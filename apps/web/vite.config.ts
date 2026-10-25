@@ -19,6 +19,10 @@ export default defineConfig({
 				find: /^next\/navigation$/,
 				replacement: r("./src/shims/next-navigation.ts"),
 			},
+		// CI builds the Rust/WASM crates (custom shaders) and points here.
+		...(process.env.OPENCUT_WASM_LOCAL
+			? [{ find: /^opencut-wasm$/, replacement: r("../../rust/wasm/pkg") }]
+			: []),
 		],
 	},
 	worker: {
