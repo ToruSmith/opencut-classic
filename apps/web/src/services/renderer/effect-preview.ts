@@ -5,7 +5,7 @@ import type { ParamValues } from "@/params";
 import { gpuRenderer } from "./gpu-renderer";
 
 const PREVIEW_SIZE = 160;
-const PREVIEW_IMAGE_PATH = "/effects/preview.jpg";
+const PREVIEW_IMAGE_PATH = `${import.meta.env.BASE_URL}effects/preview.jpg`;
 
 class EffectPreviewService {
 	private testSourceCanvas: OffscreenCanvas | null = null;

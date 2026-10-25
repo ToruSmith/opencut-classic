@@ -1,6 +1,6 @@
 {
 	"compilerOptions": {
-		"target": "ES2017",
+		"target": "ES2022",
 		"lib": ["dom", "dom.iterable", "esnext"],
 		"allowJs": true,
 		"skipLibCheck": true,
@@ -12,27 +12,15 @@
 		"resolveJsonModule": true,
 		"isolatedModules": true,
 		"jsx": "react-jsx",
-		"incremental": true,
-		"plugins": [
-			{
-				"name": "next"
-			}
-		],
+		"forceConsistentCasingInFileNames": true,
+		"types": ["vite/client", "node"],
 		"paths": {
-			"@/*": ["./src/*"]
-		},
-		"forceConsistentCasingInFileNames": true
+			"@/*": ["./src/*"],
+			"next/link": ["./src/shims/next-link.tsx"],
+			"next/image": ["./src/shims/next-image.tsx"],
+			"next/navigation": ["./src/shims/next-navigation.ts"]
+		}
 	},
-	"include": [
-		"**/*.ts",
-		"**/*.tsx",
-		"apps/web/.next/types/**/*.ts",
-		"next-env.d.ts",
-		".next/types/**/*.ts",
-		"src/types/**/*.d.ts",
-		"../../use-frame-cache.ts",
-		"src/stores/timeline-store.ts",
-		".next/dev/types/**/*.ts"
-	],
+	"include": ["src", "vite.config.ts"],
 	"exclude": ["node_modules"]
 }

@@ -8,7 +8,7 @@ set +e
 code=${PIPESTATUS[0]}
 set -e
 if [ "$code" -ne 0 ]; then
-  body="$(tail -n 70 "$log" | sed 's/\x1b\[[0-9;]*m//g' | cut -c1-400)"
+  body="$(tail -n "${TAIL:-70}" "$log" | sed 's/\x1b\[[0-9;]*m//g' | cut -c1-400)"
   enc=${body//'%'/'%25'}
   enc=${enc//$'\r'/'%0D'}
   enc=${enc//$'\n'/'%0A'}

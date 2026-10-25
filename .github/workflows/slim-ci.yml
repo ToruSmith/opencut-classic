@@ -26,6 +26,16 @@ jobs:
       - name: Install
         run: .github/scripts/run-step.sh "install" bun install
 
+      - name: Typecheck
+        id: typecheck
+        continue-on-error: true
+        working-directory: apps/web
+        run: TAIL=150 ../../.github/scripts/run-step.sh "typecheck" bunx tsc --noEmit
+
       - name: Build
         working-directory: apps/web
         run: ../../.github/scripts/run-step.sh "build" bun run build
+
+      - name: Fail if typecheck failed
+        if: steps.typecheck.outcome == 'failure'
+        run: exit 1
