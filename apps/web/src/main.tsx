@@ -30,7 +30,10 @@ function prefetchEditorWhenIdle() {
 		navigator as Navigator & { connection?: { saveData?: boolean } }
 	).connection;
 	if (connection?.saveData) return;
-	const run = () => void loadEditorPage().catch(() => {});
+	const run = () => {
+		void loadEditorPage().catch(() => {});
+		void import("mediabunny").catch(() => {});
+	};
 	if ("requestIdleCallback" in window) {
 		window.requestIdleCallback(run, { timeout: 4000 });
 	} else {

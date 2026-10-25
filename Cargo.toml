@@ -8,3 +8,8 @@ members = [
     "rust/crates/masks",
     "rust/wasm", "rust/crates/compositor",
 ]
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

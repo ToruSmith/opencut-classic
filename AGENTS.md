@@ -57,3 +57,4 @@
 
 - `bun test` 有既有失敗(與近期改動無關):`timeline/placement/__tests__/resolve.test.ts`(`ZERO_MEDIA_TIME` 初始化順序)、`params/registry.ts`(`DEFAULTS` 初始化順序)——都是循環匯入;以及 bun 載不了 `opencut-wasm`。
 - 日誌下載被擋,只能讀 annotations。
+- Rust release 使用 `lto` + `codegen-units=1`(Cargo.toml),CI 的 wasm 步驟會比以前慢一些。
