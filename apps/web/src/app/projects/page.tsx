@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { StorageDialog } from "@/project/components/storage-dialog";
 import type { EditorCore } from "@/core";
 import { MigrationDialog } from "@/project/components/migration-dialog";
 import { StoragePersistenceDialog } from "@/services/storage/components/storage-persistence-dialog";
@@ -183,6 +184,7 @@ function ProjectsHeader() {
 
 				<div className="flex items-center gap-3 md:gap-4">
 					<SearchBar className="hidden md:block" />
+					<StorageButton />
 					<ImportBackupButton />
 					<NewProjectButton />
 				</div>
@@ -522,6 +524,23 @@ function SortDropdown({ children }: { children: React.ReactNode }) {
 				</DropdownMenuCheckboxItem>
 			</DropdownMenuContent>
 		</DropdownMenu>
+	);
+}
+
+function StorageButton() {
+	const [open, setOpen] = useState(false);
+	return (
+		<>
+			<Button
+				size="lg"
+				variant="outline"
+				className="flex px-5 md:px-6"
+				onClick={() => setOpen(true)}
+			>
+				<span className="text-sm font-medium">儲存空間</span>
+			</Button>
+			<StorageDialog isOpen={open} onOpenChange={setOpen} />
+		</>
 	);
 }
 

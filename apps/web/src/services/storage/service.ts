@@ -664,6 +664,25 @@ class StorageService {
 		return newId;
 	}
 
+	/** 專案內所有素材的總大小(bytes),以及素材數量 */
+	async getProjectMediaUsage({
+		projectId,
+	}: {
+		projectId: string;
+	}): Promise<{ bytes: number; count: number }> {
+		const { mediaMetadataAdapter } = this.getProjectMediaAdapters({ projectId });
+		const ids = await mediaMetadataAdapter.list();
+		let bytes = 0;
+		let count = 0;
+		for (const id of ids) {
+			const metadata = await mediaMetadataAdapter.get(id);
+			if (!metadata) continue;
+			bytes += metadata.size ?? 0;
+			count += 1;
+		}
+		return { bytes, count };
+	}
+
 	isOPFSSupported(): boolean {
 		return OPFSAdapter.isSupported();
 	}
