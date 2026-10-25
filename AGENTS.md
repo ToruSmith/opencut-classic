@@ -58,3 +58,14 @@
 - `bun test` 有既有失敗(與近期改動無關):`timeline/placement/__tests__/resolve.test.ts`(`ZERO_MEDIA_TIME` 初始化順序)、`params/registry.ts`(`DEFAULTS` 初始化順序)——都是循環匯入;以及 bun 載不了 `opencut-wasm`。
 - 日誌下載被擋,只能讀 annotations。
 - Rust release 使用 `lto` + `codegen-units=1`(Cargo.toml),CI 的 wasm 步驟會比以前慢一些。
+
+## 新增效果 / 轉場
+
+- **效果(像素處理)**:
+  1. 在 `rust/crates/effects/src/shaders/` 加 `.wgsl`(uniform 結構固定為 `resolution` + `direction`(vec2) + `scalars`(vec4),共 8 個浮點數)。
+  2. 在 `pipeline.rs` 註冊 shader、並在 `pack_effect_uniforms` 加上該 shader 的 uniform 對應。
+  3. 在 `shader_tests.rs` 的 `SHADERS` 加上新檔案。**CI 的 `shaders` job 用 naga 驗證所有 WGSL**——瀏覽器要到執行時才編譯 shader,只要有一個寫錯,所有效果會一起壞掉,CI 的 build / Deploy 都抓不到。
+  4. 在 `apps/web/src/effects/definitions/` 加定義並在 `index.ts` 註冊。
+  - 沒有 GPU 可以實測:shader 通過 naga 只代表語法與型別正確,視覺結果要在瀏覽器確認。
+- **轉場(進出場動畫)**:`transitions/presets.ts` 是純函式,把動畫展開成關鍵影格(動畫基準值要從 `element.params` 讀,不是 `element.opacity` 這類不存在的欄位)。測試在 `transitions/__tests__/`。
+- 字幕解析(`subtitles/`)、字幕切段(`transcription/caption.ts`)也都是純函式,有測試;中文沒有空格,按標點與字數(12 字)切。
