@@ -853,8 +853,8 @@ function TimelineTrackRows({
 							}}
 						>
 							{canTrackHaveAudio(track) && track.muted
-								? "Unmute track"
-								: "Mute track"}
+								? "取消軌道靜音"
+								: "軌道靜音"}
 						</ContextMenuItem>
 						<ContextMenuItem
 							icon={<HugeiconsIcon icon={ViewIcon} />}
@@ -864,8 +864,8 @@ function TimelineTrackRows({
 							}}
 						>
 							{canTrackBeHidden(track) && track.hidden
-								? "Show track"
-								: "Hide track"}
+								? "顯示軌道"
+								: "隱藏軌道"}
 						</ContextMenuItem>
 						{track.id !== mainTrackId && (
 							<ContextMenuItem

@@ -546,8 +546,8 @@ function MediaActions({
 					<TooltipContent>
 						<p>
 							{mediaViewMode === "grid"
-								? "Switch to list view"
-								: "Switch to grid view"}
+								? "切換為清單檢視"
+								: "切換為格狀檢視"}
 						</p>
 					</TooltipContent>
 				</Tooltip>

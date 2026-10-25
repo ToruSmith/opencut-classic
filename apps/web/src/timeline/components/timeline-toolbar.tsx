@@ -122,7 +122,7 @@ function ToolbarLeftSection() {
 			? getSourceAudioActionLabel({
 					element: selectedElement.element,
 				})
-			: "Extract audio";
+			: "分離音訊";
 	const isSelectedSourceAudioSeparated =
 		selectedElement?.element.type === "video" &&
 		isSourceAudioSeparated({
@@ -208,7 +208,7 @@ function ToolbarLeftSection() {
 					<ToolbarButton
 						icon={<HugeiconsIcon icon={Bookmark02Icon} />}
 						isActive={isCurrentlyBookmarked}
-						tooltip={isCurrentlyBookmarked ? "Remove bookmark" : "Add bookmark"}
+						tooltip={isCurrentlyBookmarked ? "移除書籤" : "新增書籤"}
 						onClick={({ event }) =>
 							handleAction({ action: "toggle-bookmark", event })
 						}

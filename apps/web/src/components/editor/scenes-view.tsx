@@ -113,7 +113,7 @@ export function ScenesView({ children }: { children: React.ReactNode }) {
 							onClick={handleSelectMode}
 						>
 							<ListCheck />
-							{isSelectMode ? "Cancel" : "Select"}
+							{isSelectMode ? "取消" : "選取"}
 						</Button>
 						{isSelectMode && (
 							<DeleteDialog
@@ -203,7 +203,7 @@ function DeleteDialog({
 				</DialogHeader>
 				<DialogFooter>
 					<Button variant="outline" onClick={() => setOpen(false)}>
-						Cancel
+						取消
 					</Button>
 					<Button
 						variant="destructive"
