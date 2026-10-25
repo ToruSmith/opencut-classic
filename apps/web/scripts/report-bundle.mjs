@@ -104,30 +104,35 @@ function attribute(jsPath) {
 	return [...groups.entries()].sort((a, b) => b[1] - a[1]);
 }
 
-const analysis = [];
-for (const row of rows.filter((r) => r.name.endsWith(".js")).slice(0, 4)) {
+const analysisBlocks = [];
+for (const row of rows.filter((r) => r.name.endsWith(".js")).slice(0, 5)) {
 	const groups = attribute(join(root, row.name));
 	if (!groups) continue;
-	analysis.push("", `── ${row.name}(${(row.size / 1024).toFixed(0)} KB)內容佔比 ──`);
-	for (const [name, bytes] of groups.slice(0, 28)) {
-		analysis.push(`${(bytes / 1024).toFixed(1).padStart(9)} KB  ${name}`);
+	const block = [`── ${row.name}(${(row.size / 1024).toFixed(0)} KB)內容佔比 ──`];
+	for (const [name, bytes] of groups.slice(0, 45)) {
+		block.push(`${(bytes / 1024).toFixed(1).padStart(9)} KB  ${name}`);
 	}
+	analysisBlocks.push(block);
 }
-lines.push(...analysis);
 
-console.log(lines.join("\n"));
+console.log([...lines, ...analysisBlocks.flatMap((b) => ["", ...b])].join("\n"));
 
 if (process.env.GITHUB_ACTIONS) {
-	const encoded = lines
-		.join("\n")
-		.replace(/%/g, "%25")
-		.replace(/\r/g, "%0D")
-		.replace(/\n/g, "%0A");
-	console.log(`::notice title=bundle-report::${encoded}`);
+	// GitHub 單則註解有長度上限,所以每個區塊各發一則
+	const notice = (title, blockLines) => {
+		const encoded = blockLines
+			.join("\n")
+			.replace(/%/g, "%25")
+			.replace(/\r/g, "%0D")
+			.replace(/\n/g, "%0A");
+		console.log(`::notice title=${title}::${encoded}`);
+	};
+	notice("bundle-report", lines);
+	analysisBlocks.forEach((block, index) => notice(`bundle-chunk-${index + 1}`, block));
 	if (process.env.GITHUB_STEP_SUMMARY) {
 		appendFileSync(
 			process.env.GITHUB_STEP_SUMMARY,
-			`### 打包大小\n\n\`\`\`\n${lines.join("\n")}\n\`\`\`\n`,
+			`### 打包大小\n\n\`\`\`\n${[...lines, ...analysisBlocks.flatMap((b) => ["", ...b])].join("\n")}\n\`\`\`\n`,
 		);
 	}
 }
