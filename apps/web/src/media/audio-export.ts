@@ -1,4 +1,3 @@
-import { ALL_FORMATS, AudioBufferSink, BlobSource, Input } from "mediabunny";
 import type { SceneTracks } from "@/timeline";
 import type { MediaAsset } from "@/media/types";
 import { collectAudibleCandidates } from "@/media/audio";
@@ -80,6 +79,10 @@ async function decodeWholeFile(file: Blob): Promise<AudioBuffer> {
 
 /** 用 mediabunny 只解碼需要的範圍,整個檔案不會一次進記憶體 */
 async function openMediaReader(file: File): Promise<AudioSourceReader | null> {
+	// 匯出才會用到,且體積大,所以動態載入
+	const { ALL_FORMATS, AudioBufferSink, BlobSource, Input } = await import(
+		"mediabunny"
+	);
 	const input = new Input({
 		source: new BlobSource(file),
 		formats: ALL_FORMATS,

@@ -1,17 +1,10 @@
 import EventEmitter from "eventemitter3";
 
-import {
-	Output,
-	Mp4OutputFormat,
-	WebMOutputFormat,
-	BufferTarget,
-	StreamTarget,
-	CanvasSource,
+import type {
 	AudioBufferSource,
-	QUALITY_LOW,
-	QUALITY_MEDIUM,
-	QUALITY_HIGH,
-	QUALITY_VERY_HIGH,
+	BufferTarget,
+	CanvasSource,
+	Output,
 } from "mediabunny";
 import type { FrameRate } from "opencut-wasm";
 import { mediaTimeToSeconds } from "opencut-wasm";
@@ -36,12 +29,6 @@ type ExportParams = {
 	writable?: FileSystemWritableFileStream;
 };
 
-const qualityMap = {
-	low: QUALITY_LOW,
-	medium: QUALITY_MEDIUM,
-	high: QUALITY_HIGH,
-	very_high: QUALITY_VERY_HIGH,
-};
 
 export type SceneExporterEvents = {
 	progress: [progress: number];
@@ -93,6 +80,27 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 	}: {
 		rootNode: RootNode;
 	}): Promise<ArrayBuffer | null> {
+		// 匯出才會用到,且體積大,所以動態載入
+		const {
+			Output,
+			Mp4OutputFormat,
+			WebMOutputFormat,
+			BufferTarget,
+			StreamTarget,
+			CanvasSource,
+			AudioBufferSource,
+			QUALITY_LOW,
+			QUALITY_MEDIUM,
+			QUALITY_HIGH,
+			QUALITY_VERY_HIGH,
+		} = await import("mediabunny");
+		const qualityMap = {
+			low: QUALITY_LOW,
+			medium: QUALITY_MEDIUM,
+			high: QUALITY_HIGH,
+			very_high: QUALITY_VERY_HIGH,
+		};
+
 		const fps = this.renderer.fps;
 		const fpsFloat = frameRateToFloat(fps);
 		const ticksPerFrame = Math.round(

@@ -13,13 +13,14 @@ import {
 	getSourceTimeAtClipTime,
 	renderRetimedBuffer,
 } from "@/retime";
-import {
-	ALL_FORMATS,
+import type {
 	AudioBufferSink,
-	BlobSource,
 	Input,
-	type WrappedAudioBuffer,
+	WrappedAudioBuffer,
 } from "mediabunny";
+
+// mediabunny 體積大,等到真的要解碼音訊才載入(專案列表用不到)
+const loadMediabunny = () => import("mediabunny");
 
 export class AudioManager {
 	private audioContext: AudioContext | null = null;
@@ -594,9 +595,10 @@ export class AudioManager {
 			return null;
 		}
 
-		const input = new Input({
-			source: new BlobSource(clip.file),
-			formats: ALL_FORMATS,
+		const mediabunny = await loadMediabunny();
+		const input = new mediabunny.Input({
+			source: new mediabunny.BlobSource(clip.file),
+			formats: mediabunny.ALL_FORMATS,
 		});
 
 		try {
@@ -605,7 +607,7 @@ export class AudioManager {
 				return null;
 			}
 
-			const sink = new AudioBufferSink(audioTrack);
+			const sink = new mediabunny.AudioBufferSink(audioTrack);
 			const chunks: AudioBuffer[] = [];
 			let totalSamples = 0;
 
@@ -678,9 +680,10 @@ export class AudioManager {
 		if (existingSink) return existingSink;
 
 		try {
-			const input = new Input({
-				source: new BlobSource(clip.file),
-				formats: ALL_FORMATS,
+			const mediabunny = await loadMediabunny();
+			const input = new mediabunny.Input({
+				source: new mediabunny.BlobSource(clip.file),
+				formats: mediabunny.ALL_FORMATS,
 			});
 			const audioTrack = await input.getPrimaryAudioTrack();
 			if (!audioTrack) {
@@ -688,7 +691,7 @@ export class AudioManager {
 				return null;
 			}
 
-			const sink = new AudioBufferSink(audioTrack);
+			const sink = new mediabunny.AudioBufferSink(audioTrack);
 			this.inputs.set(clip.sourceKey, input);
 			this.sinks.set(clip.sourceKey, sink);
 			return sink;

@@ -1,10 +1,4 @@
-import {
-	Input,
-	ALL_FORMATS,
-	BlobSource,
-	CanvasSink,
-	type WrappedCanvas,
-} from "mediabunny";
+import type { CanvasSink, Input, WrappedCanvas } from "mediabunny";
 
 interface VideoSinkData {
 	input: Input;
@@ -287,6 +281,10 @@ export class VideoCache {
 		file: File;
 		maxSize?: VideoDecodeLimit;
 	}): Promise<void> {
+		// mediabunny 體積大,等到真的要解碼影片才載入
+		const { ALL_FORMATS, BlobSource, CanvasSink, Input } = await import(
+			"mediabunny"
+		);
 		const input = new Input({
 			source: new BlobSource(file),
 			formats: ALL_FORMATS,
