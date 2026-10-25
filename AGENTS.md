@@ -69,3 +69,18 @@
   - 沒有 GPU 可以實測:shader 通過 naga 只代表語法與型別正確,視覺結果要在瀏覽器確認。
 - **轉場(進出場動畫)**:`transitions/presets.ts` 是純函式,把動畫展開成關鍵影格(動畫基準值要從 `element.params` 讀,不是 `element.opacity` 這類不存在的欄位)。測試在 `transitions/__tests__/`。
 - 字幕解析(`subtitles/`)、字幕切段(`transcription/caption.ts`)也都是純函式,有測試;中文沒有空格,按標點與字數(12 字)切。
+
+## WASM 體積(已量測,2026-10)
+
+- **Slim CI 的 bundle-report 裡的 WASM 是 npm 上已發佈的 `opencut-wasm`**(沒設 `OPENCUT_WASM_LOCAL`),不是我們自己編的。自己編的版本只有 Deploy 會用。
+- 自己編的 `opencut_wasm_bg.wasm`,各種編譯設定的大小(gzip,GitHub Pages 提供的是 gzip):
+  | 設定 | raw | gzip |
+  |---|---|---|
+  | 原始(無 LTO) | 2882 KB | 1066 KB |
+  | **目前:LTO + codegen-units=1** | 2614 KB | **989 KB** |
+  | + opt-level `s` | 2235 KB | 870 KB |
+  | + opt-level `z` | 2011 KB | 792 KB |
+  | + opt-level `s` 且移除 WebGL 後備 | 315 KB | 120 KB |
+- 大宗來自 `gpu` crate 的 `wasm` feature 啟用的 `wgpu/webgl`(帶進 naga、wgpu-core、OpenGL 後端)。移除後只剩瀏覽器原生 WebGPU,體積降 88%,但**沒有 WebGPU 的瀏覽器會完全無法預覽與匯出**。
+- 使用者看過這些數字後決定**維持現狀**(保留 WebGL、不調 opt-level)。除非使用者再提,不要主動改。
+- 要重跑量測:修改 `.github/workflows/wasm-size.yml`(只有這個檔案被改的推送才會執行),結果在該 run 的 annotations(`wasm-size`)。
