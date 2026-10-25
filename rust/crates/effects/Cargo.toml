@@ -12,3 +12,7 @@ bytemuck = { version = "1.25.0", features = ["derive"] }
 gpu = { version = "0.1.0", path = "../gpu" }
 thiserror = "2.0.18"
 wgpu = "29.0.1"
+
+[dev-dependencies]
+# 只用來在測試裡驗證 WGSL。wgpu 本來就依賴 naga,Cargo.lock 不會多出新套件。
+naga = { version = "29.0.1", features = ["wgsl-in"] }

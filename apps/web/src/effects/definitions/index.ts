@@ -1,5 +1,6 @@
 import { effectsRegistry } from "../registry";
 import { blurEffectDefinition } from "./blur";
+import { chromaKeyEffectDefinition } from "./chroma-key";
 import {
 	colorAdjustEffectDefinition,
 	grayscaleEffectDefinition,
@@ -9,6 +10,7 @@ import {
 
 const defaultEffects = [
 	blurEffectDefinition,
+	chromaKeyEffectDefinition,
 	colorAdjustEffectDefinition,
 	grayscaleEffectDefinition,
 	sepiaEffectDefinition,

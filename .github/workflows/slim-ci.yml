@@ -51,3 +51,20 @@ jobs:
       - name: Fail if typecheck failed
         if: steps.typecheck.outcome == 'failure'
         run: exit 1
+
+  # 效果 shader 的 WGSL 驗證:瀏覽器要等到執行時才會編譯 shader,
+  # 任何一個寫錯都會讓所有效果一起壞掉,所以在這裡先擋下來。
+  shaders:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+
+      - name: Validate effect shaders
+        run: TAIL=150 .github/scripts/run-step.sh "shaders" cargo test -p effects
