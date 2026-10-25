@@ -51,7 +51,7 @@ export function DeleteProjectDialog({
 				</DialogHeader>
 				<DialogBody>
 					<Alert variant="destructive">
-						<AlertTitle>Warning</AlertTitle>
+						<AlertTitle>警告</AlertTitle>
 						<AlertDescription>
 							This will permanently delete{" "}
 							{singleName ? `"${singleName}"` : `${count} projects`} and all
@@ -72,10 +72,10 @@ export function DeleteProjectDialog({
 				</DialogBody>
 				<DialogFooter>
 					<Button variant="outline" onClick={() => onOpenChange(false)}>
-						Cancel
+						取消
 					</Button>
 					<Button variant="destructive" onClick={onConfirm}>
-						Delete project
+						刪除專案
 					</Button>
 				</DialogFooter>
 			</DialogContent>

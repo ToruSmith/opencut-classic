@@ -351,14 +351,14 @@ function BookmarkPopoverContent({
 			<div className="flex flex-col gap-2">
 				<Label className="text-xs">Note</Label>
 				<Input
-					placeholder="Add a note..."
+					placeholder="新增備註…"
 					value={bookmark.note ?? ""}
 					onChange={(event) => handleUpdate({ note: event.target.value })}
 					className="h-8 text-sm"
 				/>
 			</div>
 			<div className="flex flex-col gap-2">
-				<Label className="text-xs">Color</Label>
+				<Label className="text-xs">顏色</Label>
 				<div className="relative">
 					<ColorPicker
 						value={uppercase({ string: draftColorHex })}
@@ -396,7 +396,7 @@ function BookmarkPopoverContent({
 				</div>
 			</div>
 			<div className="flex flex-col gap-2">
-				<Label className="text-xs">Duration</Label>
+				<Label className="text-xs">長度</Label>
 				<div className="flex items-center gap-1.5">
 					<Input
 						type="number"
@@ -435,7 +435,7 @@ function BookmarkPopoverContent({
 				aria-label="delete bookmark"
 			>
 				<HugeiconsIcon icon={Delete02Icon} className="!size-3.5" />
-				Delete
+				刪除
 			</Button>
 		</>
 	);

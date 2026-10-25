@@ -129,7 +129,7 @@ export function GraphEditorPopover({
 							Presets
 						</TabsTrigger>
 						<TabsTrigger value="saved" className="text-xs">
-							Saved
+							已儲存
 						</TabsTrigger>
 					</TabsList>
 					<TabsContent value="presets" className="px-3 pb-0">
@@ -178,7 +178,7 @@ export function GraphEditorPopover({
 										className="size-3.5 opacity-40"
 									/>
 								</div>
-								<span className="text-[10px] leading-tight">Save</span>
+								<span className="text-[10px] leading-tight">儲存</span>
 							</button>
 						</div>
 					</TabsContent>

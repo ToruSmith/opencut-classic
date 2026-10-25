@@ -23,128 +23,128 @@ export interface TActionDefinition extends TActionBaseDefinition {
 
 export const ACTIONS = {
 	"toggle-play": {
-		description: "Play/Pause",
+		description: "播放/暫停",
 		category: "playback",
 	},
 	"stop-playback": {
-		description: "Stop playback",
+		description: "停止播放",
 		category: "playback",
 	},
 	"seek-forward": {
-		description: "Seek forward 1 second",
+		description: "前進 1 秒",
 		category: "playback",
 		args: { seconds: "number" },
 	},
 	"seek-backward": {
-		description: "Seek backward 1 second",
+		description: "後退 1 秒",
 		category: "playback",
 		args: { seconds: "number" },
 	},
 	"frame-step-forward": {
-		description: "Frame step forward",
+		description: "下一格",
 		category: "navigation",
 	},
 	"frame-step-backward": {
-		description: "Frame step backward",
+		description: "上一格",
 		category: "navigation",
 	},
 	"jump-forward": {
-		description: "Jump forward 5 seconds",
+		description: "前進 5 秒",
 		category: "navigation",
 		args: { seconds: "number" },
 	},
 	"jump-backward": {
-		description: "Jump backward 5 seconds",
+		description: "後退 5 秒",
 		category: "navigation",
 		args: { seconds: "number" },
 	},
 	"goto-start": {
-		description: "Go to timeline start",
+		description: "跳到開頭",
 		category: "navigation",
 	},
 	"goto-end": {
-		description: "Go to timeline end",
+		description: "跳到結尾",
 		category: "navigation",
 	},
 	split: {
-		description: "Split elements at playhead",
+		description: "在播放頭分割",
 		category: "editing",
 	},
 	"split-left": {
-		description: "Split and remove left",
+		description: "分割並刪除左側",
 		category: "editing",
 	},
 	"split-right": {
-		description: "Split and remove right",
+		description: "分割並刪除右側",
 		category: "editing",
 	},
 	"delete-selected": {
-		description: "Delete current selection",
+		description: "刪除選取項目",
 		category: "editing",
 	},
 	"copy-selected": {
-		description: "Copy selected elements",
+		description: "複製選取項目",
 		category: "editing",
 	},
 	"paste-copied": {
-		description: "Paste elements at playhead",
+		description: "在播放頭貼上",
 		category: "editing",
 	},
 	"toggle-snapping": {
-		description: "Toggle snapping",
+		description: "切換吸附",
 		category: "editing",
 	},
 	"toggle-ripple-editing": {
-		description: "Toggle ripple editing",
+		description: "切換連動剪輯",
 		category: "editing",
 	},
 	"toggle-source-audio": {
-		description: "Extract or recover source audio",
+		description: "擷取或還原原始音訊",
 		category: "editing",
 	},
 	"select-all": {
-		description: "Select all elements",
+		description: "全選",
 		category: "selection",
 	},
 	"cancel-interaction": {
-		description: "Cancel current interaction",
+		description: "取消目前操作",
 		category: "controls",
 	},
 	"deselect-all": {
-		description: "Deselect all elements",
+		description: "取消全選",
 		category: "selection",
 	},
 	"duplicate-selected": {
-		description: "Duplicate selected element",
+		description: "複製選取元素",
 		category: "selection",
 	},
 	"toggle-elements-muted-selected": {
-		description: "Mute/unmute selected elements",
+		description: "靜音/取消靜音",
 		category: "selection",
 	},
 	"toggle-elements-visibility-selected": {
-		description: "Show/hide selected elements",
+		description: "顯示/隱藏選取項目",
 		category: "selection",
 	},
 	"toggle-bookmark": {
-		description: "Toggle bookmark at playhead",
+		description: "在播放頭切換書籤",
 		category: "timeline",
 	},
 	undo: {
-		description: "Undo",
+		description: "復原",
 		category: "history",
 	},
 	redo: {
-		description: "Redo",
+		description: "重做",
 		category: "history",
 	},
 	"remove-media-asset": {
-		description: "Remove media asset",
+		description: "移除素材",
 		category: "assets",
 		args: { projectId: "string", assetId: "string" },
 	},
 	"remove-media-assets": {
-		description: "Remove media assets",
+		description: "移除素材",
 		category: "assets",
 		args: { projectId: "string", assetIds: "string[]" },
 	},

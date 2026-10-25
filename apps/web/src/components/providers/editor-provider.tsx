@@ -57,7 +57,7 @@ export function EditorProvider({ projectId, children }: EditorProviderProps) {
 				if (isNotFound) {
 					try {
 						const newProjectId = await editor.project.createNewProject({
-							name: "Untitled Project",
+							name: "未命名專案",
 						});
 						router.replace(`/editor/${newProjectId}`);
 					} catch (_createErr) {

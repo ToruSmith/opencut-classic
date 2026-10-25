@@ -8,7 +8,7 @@
 @plugin "tailwindcss-animate";
 
 :root {
-  --font-inter: "Inter Variable";
+  --font-inter: "Inter Variable", "Noto Sans TC Variable";
   --background: hsl(0, 0%, 100%);
   --foreground: hsl(0 0% 11%);
   --card: hsl(0, 0%, 100%);

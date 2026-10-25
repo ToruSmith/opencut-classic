@@ -1,4 +1,5 @@
 import "@fontsource-variable/inter";
+import "@fontsource-variable/noto-sans-tc";
 import "./app/globals.css";
 
 import { StrictMode } from "react";

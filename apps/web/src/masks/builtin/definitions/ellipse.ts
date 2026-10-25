@@ -10,7 +10,7 @@ import {
 
 export const ellipseMaskDefinition: MaskDefinition<"ellipse"> = {
 	type: "ellipse",
-	name: "Ellipse",
+	name: "橢圓",
 	features: {
 		hasPosition: true,
 		hasRotation: true,

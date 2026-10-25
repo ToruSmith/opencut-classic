@@ -136,7 +136,7 @@ export function ScenesView({ children }: { children: React.ReactNode }) {
 					</div>
 					{scenes.length === 0 ? (
 						<div className="text-muted-foreground text-sm">
-							No scenes available
+							沒有可用場景
 						</div>
 					) : (
 						<div className="space-y-2">
@@ -195,7 +195,7 @@ function DeleteDialog({
 			<DialogTrigger asChild>{trigger}</DialogTrigger>
 			<DialogContent>
 				<DialogHeader>
-					<DialogTitle>Delete Scenes</DialogTitle>
+					<DialogTitle>刪除場景</DialogTitle>
 					<DialogDescription>
 						Are you sure you want to delete {count} scene
 						{count === 1 ? "" : "s"}? This action cannot be undone.
@@ -210,7 +210,7 @@ function DeleteDialog({
 						onClick={handleDelete}
 						disabled={disabled}
 					>
-						Delete
+						刪除
 					</Button>
 				</DialogFooter>
 			</DialogContent>

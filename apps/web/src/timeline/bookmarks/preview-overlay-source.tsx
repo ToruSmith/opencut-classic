@@ -9,7 +9,7 @@ import type { MediaTime } from "@/wasm";
 
 export const bookmarkNotesPreviewOverlay: PreviewOverlayDefinition = {
 	id: "bookmark-notes",
-	label: "Show bookmark notes",
+	label: "顯示書籤備註",
 	defaultVisible: true,
 };
 

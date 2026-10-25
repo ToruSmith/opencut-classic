@@ -336,7 +336,7 @@ function resolvePropertySelection({
 			? [
 					{
 						key: "value",
-						label: "Curve",
+						label: "曲線",
 						context: contexts[0].context,
 						allContexts: contexts.map(({ context }) => context),
 					},

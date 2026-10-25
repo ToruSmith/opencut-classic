@@ -10,10 +10,10 @@ export interface EasingPreset {
 }
 
 export const BUILTIN_PRESETS: EasingPreset[] = [
-	{ id: "smooth", label: "Smooth", value: [0.25, 0.1, 0.25, 1] },
-	{ id: "ease-out", label: "Ease out", value: [0, 0, 0.2, 1] },
-	{ id: "ease-in", label: "Ease in", value: [0.8, 0, 1, 1] },
-	{ id: "ease-in-out", label: "In out", value: [0.4, 0, 0.2, 1] },
-	{ id: "pop", label: "Pop", value: [0.175, 0.885, 0.32, 1.275] },
-	{ id: "linear", label: "Linear", value: [0, 0, 1, 1] },
+	{ id: "smooth", label: "平滑", value: [0.25, 0.1, 0.25, 1] },
+	{ id: "ease-out", label: "緩出", value: [0, 0, 0.2, 1] },
+	{ id: "ease-in", label: "緩入", value: [0.8, 0, 1, 1] },
+	{ id: "ease-in-out", label: "緩入緩出", value: [0.4, 0, 0.2, 1] },
+	{ id: "pop", label: "彈出", value: [0.175, 0.885, 0.32, 1.275] },
+	{ id: "linear", label: "線性", value: [0, 0, 1, 1] },
 ];

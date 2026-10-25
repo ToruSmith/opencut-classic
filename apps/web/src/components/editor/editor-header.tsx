@@ -109,7 +109,7 @@ function ProjectDropdown() {
 					name: newName.trim(),
 				});
 			} catch (error) {
-				toast.error("Failed to rename project", {
+				toast.error("重新命名專案失敗", {
 					description:
 						error instanceof Error ? error.message : "Please try again",
 				});
@@ -127,7 +127,7 @@ function ProjectDropdown() {
 				});
 				router.push("/projects");
 			} catch (error) {
-				toast.error("Failed to delete project", {
+				toast.error("刪除專案失敗", {
 					description:
 						error instanceof Error ? error.message : "Please try again",
 				});
@@ -157,7 +157,7 @@ function ProjectDropdown() {
 						disabled={isExiting}
 						icon={<HugeiconsIcon icon={Logout05Icon} />}
 					>
-						Exit project
+						離開專案
 					</DropdownMenuItem>
 
 					<DropdownMenuItem
@@ -236,7 +236,7 @@ function EditableProjectName() {
 					name: newName,
 				});
 			} catch (error) {
-				toast.error("Failed to rename project", {
+				toast.error("重新命名專案失敗", {
 					description:
 						error instanceof Error ? error.message : "Please try again",
 				});
