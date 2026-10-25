@@ -1,4 +1,5 @@
 import { useEditor } from "@/editor/use-editor";
+import { freezeFrameAtPlayhead } from "@/timeline/freeze-frame";
 import { useElementSelection } from "@/timeline/hooks/element/use-element-selection";
 import {
 	TooltipProvider,
@@ -185,9 +186,12 @@ function ToolbarLeftSection() {
 
 				<ToolbarButton
 					icon={<HugeiconsIcon icon={SnowIcon} />}
-					tooltip="定格(尚未支援)"
-					disabled={true}
-					onClick={({ event: _event }) => {}}
+					tooltip="定格 2 秒(停住播放頭所在的畫面)"
+					disabled={selectedElement?.element.type !== "video"}
+					onClick={({ event }) => {
+						event.stopPropagation();
+						freezeFrameAtPlayhead({ editor });
+					}}
 				/>
 
 				<ToolbarButton
