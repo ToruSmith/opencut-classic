@@ -1,5 +1,10 @@
 import type { ParseSubtitleResult, SubtitleCue } from "./types";
 
+// SRT 常見的格式標記:<i> <b> <u> <s> <font ...> 與 {\an8} 這類 ASS 風格覆寫。
+// 只移除已知標籤,避免誤刪「a < b」這種一般文字。
+const INLINE_TAG_PATTERN =
+	/<\/?(?:i|b|u|s|font|c|v|ruby|rt|lang)(?:\s[^>]*)?>|\{\\[^}]*\}/gi;
+
 const TIMESTAMP_SEPARATOR = /\s*-->\s*/;
 const TIMESTAMP_PATTERN =
 	/^(\d{2}:\d{2}:\d{2}[,.]\d{1,3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{1,3})/;
@@ -37,7 +42,10 @@ export function parseSrt({ input }: { input: string }): ParseSubtitleResult {
 		}
 
 		const textLines = lines.slice(timestampIndex + 1);
-		const text = textLines.join("\n").trim();
+		const text = textLines
+			.join("\n")
+			.replace(INLINE_TAG_PATTERN, "")
+			.trim();
 		if (!text) {
 			skippedCueCount += 1;
 			continue;
