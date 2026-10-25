@@ -147,7 +147,7 @@ export class RendererManager {
 		onProgress?: ({ progress }: { progress: number }) => void;
 		onCancel?: () => boolean;
 	}): Promise<ExportResult> {
-		const { format, quality, fps, includeAudio } = options;
+		const { format, quality, fps, includeAudio, writable } = options;
 
 		try {
 			const tracks = this.editor.scenes.getActiveScene().tracks;
@@ -192,6 +192,7 @@ export class RendererManager {
 				quality,
 				shouldIncludeAudio: !!includeAudio,
 				audioBuffer: audioBuffer || undefined,
+				writable,
 			});
 
 			exporter.on("progress", (progress) => {
@@ -216,11 +217,17 @@ export class RendererManager {
 				clearInterval(cancelInterval);
 
 				if (cancelled) {
+					await writable?.abort().catch(() => {});
 					return { success: false, cancelled: true };
 				}
 
 				if (!buffer) {
+					await writable?.abort().catch(() => {});
 					return { success: false, error: "Export failed to produce buffer" };
+				}
+
+				if (writable) {
+					return { success: true, streamed: true };
 				}
 
 				return {

@@ -18,11 +18,15 @@ export interface ExportOptions {
 	quality: ExportQuality;
 	fps?: FrameRate;
 	includeAudio?: boolean;
+	/** 直接串流寫入磁碟(File System Access API),避免整支影片放進記憶體 */
+	writable?: FileSystemWritableFileStream;
 }
 
 export interface ExportResult {
 	success: boolean;
 	buffer?: ArrayBuffer;
+	/** true 表示已直接寫入使用者選擇的檔案 */
+	streamed?: boolean;
 	error?: string;
 	cancelled?: boolean;
 }

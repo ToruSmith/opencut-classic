@@ -5,6 +5,7 @@ import {
 	Mp4OutputFormat,
 	WebMOutputFormat,
 	BufferTarget,
+	StreamTarget,
 	CanvasSource,
 	AudioBufferSource,
 	QUALITY_LOW,
@@ -28,6 +29,7 @@ type ExportParams = {
 	quality: ExportQuality;
 	shouldIncludeAudio?: boolean;
 	audioBuffer?: AudioBuffer;
+	writable?: FileSystemWritableFileStream;
 };
 
 const qualityMap = {
@@ -50,6 +52,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 	private quality: ExportQuality;
 	private shouldIncludeAudio: boolean;
 	private audioBuffer?: AudioBuffer;
+	private writable?: FileSystemWritableFileStream;
 
 	private isCancelled = false;
 
@@ -61,6 +64,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		quality,
 		shouldIncludeAudio,
 		audioBuffer,
+		writable,
 	}: ExportParams) {
 		super();
 		this.renderer = new CanvasRenderer({
@@ -73,6 +77,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		this.quality = quality;
 		this.shouldIncludeAudio = shouldIncludeAudio ?? false;
 		this.audioBuffer = audioBuffer;
+		this.writable = writable;
 	}
 
 	cancel(): void {
@@ -96,7 +101,16 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 
 		const output = new Output({
 			format: outputFormat,
-			target: new BufferTarget(),
+			target: this.writable
+				? new StreamTarget(
+						this.writable as unknown as WritableStream<{
+							type: "write";
+							data: Uint8Array;
+							position: number;
+						}>,
+						{ chunked: true },
+					)
+				: new BufferTarget(),
 		});
 
 		const videoSource = new CanvasSource(this.renderer.getOutputCanvas(), {
@@ -159,7 +173,12 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		await output.finalize();
 		this.emit("progress", 1);
 
-		const buffer = output.target.buffer;
+		if (this.writable) {
+			this.emit("complete", new ArrayBuffer(0));
+			return new ArrayBuffer(0);
+		}
+
+		const buffer = (output.target as BufferTarget).buffer;
 		if (!buffer) {
 			this.emit("error", new Error("Failed to export video"));
 			return null;

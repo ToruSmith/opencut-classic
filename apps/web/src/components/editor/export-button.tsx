@@ -114,17 +114,50 @@ function ExportPopover({
 	const handleExport = async () => {
 		if (!activeProject) return;
 
+		// 支援的瀏覽器(Chrome/Edge):先選存檔位置,影片會邊編碼邊寫入磁碟,不佔記憶體
+		let writable: FileSystemWritableFileStream | undefined;
+		const picker = (
+			window as unknown as {
+				showSaveFilePicker?: (options: unknown) => Promise<FileSystemFileHandle>;
+			}
+		).showSaveFilePicker;
+		if (picker) {
+			try {
+				const extension = getExportFileExtension({ format });
+				const handle = await picker.call(window, {
+					suggestedName: `${activeProject.metadata.name}${extension}`,
+					types: [
+						{
+							description: format === "webm" ? "WebM 影片" : "MP4 影片",
+							accept: { [getExportMimeType({ format })]: [extension] },
+						},
+					],
+				});
+				writable = await handle.createWritable();
+			} catch (error) {
+				if (error instanceof DOMException && error.name === "AbortError") return;
+				console.warn("無法使用直接寫檔,改用記憶體匯出", error);
+			}
+		}
+
 		const result = await editor.project.export({
 			options: {
 				format,
 				quality,
 				fps: activeProject.settings.fps,
 				includeAudio: shouldIncludeAudio,
+				writable,
 			},
 		});
 
 		if (result.cancelled) {
 			editor.project.clearExportState();
+			return;
+		}
+
+		if (result.success && result.streamed) {
+			editor.project.clearExportState();
+			onOpenChange(false);
 			return;
 		}
 
