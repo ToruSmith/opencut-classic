@@ -35,3 +35,12 @@ createRoot(root).render(
 		</ThemeProvider>
 	</StrictMode>,
 );
+
+// 離線使用:註冊 Service Worker(僅正式站)
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+	window.addEventListener("load", () => {
+		navigator.serviceWorker
+			.register(`${import.meta.env.BASE_URL}sw.js`)
+			.catch((error) => console.warn("Service Worker 註冊失敗", error));
+	});
+}

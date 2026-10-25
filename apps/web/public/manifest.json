@@ -1,6 +1,7 @@
 {
-	"name": "OpenCut",
-	"description": "A simple but powerful video editor that gets the job done. In your browser.",
+	"name": "剪輯台",
+	"short_name": "剪輯台",
+	"description": "在瀏覽器裡剪片的輕量剪輯工具",
 	"display": "standalone",
 	"start_url": "./",
 	"icons": [

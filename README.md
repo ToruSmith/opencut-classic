@@ -44,3 +44,14 @@ bun run typecheck
 ## 授權與來源
 
 MIT 授權，原始碼來自 OpenCut，著作權屬原作者，詳見 [LICENSE](LICENSE)。
+
+
+## 近期新增
+
+- 繁體中文介面、Noto Sans TC 字型
+- 濾鏡:色彩調整、黑白、復古褐色、暗角(自訂 GPU 著色器,由 GitHub Actions 編譯 WASM)
+- 轉場面板:淡入、淡出、淡入淡出(以關鍵幀實作)
+- 定格(freeze frame)、復原/重做按鈕
+- 匯出直接串流寫入硬碟(Chrome / Edge)
+- 專案備份檔(`.opencut-backup`)匯出與匯入
+- 離線使用(Service Worker):第一次連線後,斷網也能開啟
