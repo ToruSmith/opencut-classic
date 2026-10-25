@@ -5,7 +5,8 @@ import {
 	VideoSampleSink,
 	type VideoCodec,
 } from "mediabunny";
-import { createTimelineAudioBuffer } from "@/media/audio";
+import { createTimelineAudioStream } from "@/media/audio-export";
+import { floatToInterleavedPcm16 } from "@/media/audio-mixer";
 import type { SceneTracks } from "@/timeline";
 import type { MediaAsset } from "@/media/types";
 import { TICKS_PER_SECOND } from "@/wasm";
@@ -82,6 +83,8 @@ const SAMPLE_RATE = 44100;
 const NUM_CHANNELS = 2;
 const EMPTY_TIMELINE_SILENT_DURATION_SECONDS = 0.1;
 const MIN_SILENT_DURATION_SECONDS = 0.001;
+const WAV_HEADER_BYTES = 44;
+const BYTES_PER_SAMPLE = 2;
 
 export const extractTimelineAudio = async ({
 	tracks,
@@ -96,69 +99,68 @@ export const extractTimelineAudio = async ({
 }): Promise<Blob> => {
 	if (totalDuration === 0) {
 		return createWavBlob({
-			samples: new Float32Array(
-				SAMPLE_RATE * EMPTY_TIMELINE_SILENT_DURATION_SECONDS,
-			),
+			parts: [
+				new ArrayBuffer(
+					Math.ceil(SAMPLE_RATE * EMPTY_TIMELINE_SILENT_DURATION_SECONDS) *
+						NUM_CHANNELS *
+						BYTES_PER_SAMPLE,
+				),
+			],
 		});
 	}
 
 	onProgress?.(10);
 
-	const audioBuffer = await createTimelineAudioBuffer({
+	const stream = await createTimelineAudioStream({
 		tracks,
 		mediaAssets,
 		duration: totalDuration,
 		sampleRate: SAMPLE_RATE,
 	});
 
-	if (!audioBuffer) {
+	if (!stream) {
 		const silentDurationSeconds = Math.max(
 			MIN_SILENT_DURATION_SECONDS,
 			totalDuration / TICKS_PER_SECOND,
 		);
-		const silentSamples = new Float32Array(
-			Math.ceil(silentDurationSeconds * SAMPLE_RATE) * NUM_CHANNELS,
-		);
-		return createWavBlob({ samples: silentSamples });
+		return createWavBlob({
+			parts: [
+				new ArrayBuffer(
+					Math.ceil(silentDurationSeconds * SAMPLE_RATE) *
+						NUM_CHANNELS *
+						BYTES_PER_SAMPLE,
+				),
+			],
+		});
 	}
 
-	onProgress?.(90);
+	// 一段一段轉成 16-bit PCM 收集起來,不需要先組出整段 32-bit 浮點音訊
+	const parts: ArrayBuffer[] = [];
+	try {
+		for (let chunk = await stream.nextChunk(); chunk; ) {
+			parts.push(
+				floatToInterleavedPcm16({
+					left: chunk.getChannelData(0),
+					right: chunk.getChannelData(Math.min(1, chunk.numberOfChannels - 1)),
+				}).buffer as ArrayBuffer,
+			);
+			onProgress?.(10 + stream.progress * 80);
+			chunk = await stream.nextChunk();
+		}
+	} finally {
+		stream.dispose();
+	}
 
-	const interleavedSamples = interleaveAudioBuffer({ audioBuffer });
 	onProgress?.(100);
-
-	return createWavBlob({ samples: interleavedSamples });
+	return createWavBlob({ parts });
 };
 
-function interleaveAudioBuffer({
-	audioBuffer,
-}: {
-	audioBuffer: AudioBuffer;
-}): Float32Array {
-	const numChannels = Math.min(NUM_CHANNELS, audioBuffer.numberOfChannels);
-	const interleavedSamples = new Float32Array(
-		audioBuffer.length * NUM_CHANNELS,
-	);
+function createWavBlob({ parts }: { parts: ArrayBuffer[] }): Blob {
+	let dataSize = 0;
+	for (const part of parts) dataSize += part.byteLength;
 
-	for (let sampleIndex = 0; sampleIndex < audioBuffer.length; sampleIndex++) {
-		for (let channel = 0; channel < NUM_CHANNELS; channel++) {
-			const sourceChannel = Math.min(channel, Math.max(0, numChannels - 1));
-			interleavedSamples[sampleIndex * NUM_CHANNELS + channel] =
-				audioBuffer.getChannelData(sourceChannel)[sampleIndex] ?? 0;
-		}
-	}
-
-	return interleavedSamples;
-}
-
-function createWavBlob({ samples }: { samples: Float32Array }): Blob {
-	const numChannels = NUM_CHANNELS;
-	const bitsPerSample = 16;
-	const bytesPerSample = bitsPerSample / 8;
-	const numSamples = samples.length / numChannels;
-	const dataSize = numSamples * numChannels * bytesPerSample;
-	const buffer = new ArrayBuffer(44 + dataSize);
-	const view = new DataView(buffer);
+	const header = new ArrayBuffer(WAV_HEADER_BYTES);
+	const view = new DataView(header);
 
 	// riff header
 	writeString({ view, offset: 0, str: "RIFF" });
@@ -169,26 +171,18 @@ function createWavBlob({ samples }: { samples: Float32Array }): Blob {
 	writeString({ view, offset: 12, str: "fmt " });
 	view.setUint32(16, 16, true);
 	view.setUint16(20, 1, true);
-	view.setUint16(22, numChannels, true);
+	view.setUint16(22, NUM_CHANNELS, true);
 	view.setUint32(24, SAMPLE_RATE, true);
-	view.setUint32(28, SAMPLE_RATE * numChannels * bytesPerSample, true);
-	view.setUint16(32, numChannels * bytesPerSample, true);
-	view.setUint16(34, bitsPerSample, true);
+	view.setUint32(28, SAMPLE_RATE * NUM_CHANNELS * BYTES_PER_SAMPLE, true);
+	view.setUint16(32, NUM_CHANNELS * BYTES_PER_SAMPLE, true);
+	view.setUint16(34, BYTES_PER_SAMPLE * 8, true);
 
 	// data chunk
 	writeString({ view, offset: 36, str: "data" });
 	view.setUint32(40, dataSize, true);
 
-	// convert float32 to int16 and write
-	let offset = 44;
-	for (let i = 0; i < samples.length; i++) {
-		const sample = Math.max(-1, Math.min(1, samples[i]));
-		const int16 = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
-		view.setInt16(offset, int16, true);
-		offset += 2;
-	}
-
-	return new Blob([buffer], { type: "audio/wav" });
+	// Int16Array 以平台位元組序儲存;瀏覽器皆為小端,與 WAV 一致
+	return new Blob([header, ...parts], { type: "audio/wav" });
 }
 
 function writeString({

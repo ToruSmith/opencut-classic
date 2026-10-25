@@ -4,7 +4,10 @@ import type { ExportOptions, ExportResult } from "@/export";
 import { CanvasRenderer } from "@/services/renderer/canvas-renderer";
 import { SceneExporter } from "@/services/renderer/scene-exporter";
 import { buildScene } from "@/services/renderer/scene-builder";
-import { createTimelineAudioBuffer } from "@/media/audio";
+import {
+	createTimelineAudioStream,
+	type TimelineAudioStream,
+} from "@/media/audio-export";
 import { formatTimecode } from "opencut-wasm";
 import { frameRateToFloat } from "@/fps/utils";
 import { downloadBlob } from "@/utils/browser";
@@ -148,6 +151,7 @@ export class RendererManager {
 		onCancel?: () => boolean;
 	}): Promise<ExportResult> {
 		const { format, quality, fps, includeAudio, writable } = options;
+		let audioStream: TimelineAudioStream | null = null;
 
 		try {
 			const tracks = this.editor.scenes.getActiveScene().tracks;
@@ -166,10 +170,10 @@ export class RendererManager {
 			const exportFps = fps ?? activeProject.settings.fps;
 			const canvasSize = activeProject.settings.canvasSize;
 
-			let audioBuffer: AudioBuffer | null = null;
+			// 音訊不再一次混成整段,而是匯出時一小段一小段產生
 			if (includeAudio) {
 				onProgress?.({ progress: 0.05 });
-				audioBuffer = await createTimelineAudioBuffer({
+				audioStream = await createTimelineAudioStream({
 					tracks,
 					mediaAssets,
 					duration,
@@ -191,7 +195,7 @@ export class RendererManager {
 				format,
 				quality,
 				shouldIncludeAudio: !!includeAudio,
-				audioBuffer: audioBuffer || undefined,
+				audioStream: audioStream || undefined,
 				writable,
 			});
 
@@ -243,6 +247,9 @@ export class RendererManager {
 				success: false,
 				error: error instanceof Error ? error.message : "Unknown export error",
 			};
+		} finally {
+			// 正常結束時 exporter 已釋放過;這裡處理中途出錯的情況(可重複呼叫)
+			audioStream?.dispose();
 		}
 	}
 

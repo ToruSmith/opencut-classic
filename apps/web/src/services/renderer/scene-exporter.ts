@@ -19,7 +19,11 @@ import { TICKS_PER_SECOND } from "@/wasm";
 import { frameRateToFloat } from "@/fps/utils";
 import type { RootNode } from "./nodes/root-node";
 import type { ExportFormat, ExportQuality } from "@/export";
+import type { TimelineAudioStream } from "@/media/audio-export";
 import { CanvasRenderer } from "./canvas-renderer";
+
+/** 音訊比影片多領先這麼多秒寫入,讓封裝器能順利交錯兩條軌 */
+const AUDIO_LOOKAHEAD_SECONDS = 2;
 
 type ExportParams = {
 	width: number;
@@ -28,7 +32,7 @@ type ExportParams = {
 	format: ExportFormat;
 	quality: ExportQuality;
 	shouldIncludeAudio?: boolean;
-	audioBuffer?: AudioBuffer;
+	audioStream?: TimelineAudioStream;
 	writable?: FileSystemWritableFileStream;
 };
 
@@ -51,7 +55,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 	private format: ExportFormat;
 	private quality: ExportQuality;
 	private shouldIncludeAudio: boolean;
-	private audioBuffer?: AudioBuffer;
+	private audioStream?: TimelineAudioStream;
 	private writable?: FileSystemWritableFileStream;
 
 	private isCancelled = false;
@@ -63,7 +67,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		format,
 		quality,
 		shouldIncludeAudio,
-		audioBuffer,
+		audioStream,
 		writable,
 	}: ExportParams) {
 		super();
@@ -76,7 +80,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		this.format = format;
 		this.quality = quality;
 		this.shouldIncludeAudio = shouldIncludeAudio ?? false;
-		this.audioBuffer = audioBuffer;
+		this.audioStream = audioStream;
 		this.writable = writable;
 	}
 
@@ -120,15 +124,16 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 
 		output.addVideoTrack(videoSource, { frameRate: fpsFloat });
 
+		const audioStream = this.shouldIncludeAudio ? this.audioStream : undefined;
 		let audioSource: AudioBufferSource | null = null;
-		if (this.shouldIncludeAudio && this.audioBuffer) {
+		if (audioStream) {
 			let audioCodec: "aac" | "opus" = this.format === "webm" ? "opus" : "aac";
 
 			if (audioCodec === "aac" && typeof AudioEncoder !== "undefined") {
 				const { supported } = await AudioEncoder.isConfigSupported({
 					codec: "mp4a.40.2",
-					sampleRate: this.audioBuffer.sampleRate,
-					numberOfChannels: this.audioBuffer.numberOfChannels,
+					sampleRate: audioStream.sampleRate,
+					numberOfChannels: audioStream.numberOfChannels,
 					bitrate: 192000,
 				});
 				if (!supported) audioCodec = "opus";
@@ -143,11 +148,55 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 
 		await output.start();
 
-		if (audioSource && this.audioBuffer) {
-			await audioSource.add(this.audioBuffer);
-			audioSource.close();
-		}
+		// 音訊一段一段混、一段一段編碼,記憶體用量不隨影片長度增加
+		let audioSeconds = 0;
+		let audioFinished = !audioStream || !audioSource;
+		const pumpAudio = async ({ untilSeconds }: { untilSeconds: number }) => {
+			while (!audioFinished && audioSeconds < untilSeconds) {
+				if (this.isCancelled) return;
+				const chunk = await audioStream?.nextChunk();
+				if (!chunk) {
+					audioFinished = true;
+					audioSource?.close();
+					return;
+				}
+				await audioSource?.add(chunk);
+				audioSeconds += chunk.length / chunk.sampleRate;
+			}
+		};
 
+		try {
+			return await this.encodeFrames({
+				rootNode,
+				output,
+				videoSource,
+				frameCount,
+				ticksPerFrame,
+				fpsFloat,
+				pumpAudio,
+			});
+		} finally {
+			audioStream?.dispose();
+		}
+	}
+
+	private async encodeFrames({
+		rootNode,
+		output,
+		videoSource,
+		frameCount,
+		ticksPerFrame,
+		fpsFloat,
+		pumpAudio,
+	}: {
+		rootNode: RootNode;
+		output: Output;
+		videoSource: CanvasSource;
+		frameCount: number;
+		ticksPerFrame: number;
+		fpsFloat: number;
+		pumpAudio: (args: { untilSeconds: number }) => Promise<void>;
+	}): Promise<ArrayBuffer | null> {
 		for (let i = 0; i < frameCount; i++) {
 			if (this.isCancelled) {
 				await output.cancel();
@@ -157,11 +206,14 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 
 			const timeTicks = i * ticksPerFrame;
 			const timeSeconds = mediaTimeToSeconds({ time: timeTicks });
+			await pumpAudio({ untilSeconds: timeSeconds + AUDIO_LOOKAHEAD_SECONDS });
 			await this.renderer.render({ node: rootNode, time: timeTicks });
 			await videoSource.add(timeSeconds, 1 / fpsFloat);
 
 			this.emit("progress", i / frameCount);
 		}
+
+		await pumpAudio({ untilSeconds: Number.POSITIVE_INFINITY });
 
 		if (this.isCancelled) {
 			await output.cancel();
