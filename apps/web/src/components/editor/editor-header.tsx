@@ -20,11 +20,42 @@ import { DEFAULT_LOGO_URL } from "@/site/brand";
 import { SOCIAL_LINKS } from "@/site/social";
 import { toast } from "sonner";
 import { useEditor } from "@/editor/use-editor";
-import { CommandIcon, Logout05Icon } from "@hugeicons/core-free-icons";
+import {
+	ArrowTurnBackwardIcon,
+	ArrowTurnForwardIcon,
+	CommandIcon,
+	Logout05Icon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ShortcutsDialog } from "@/actions/components/shortcuts-dialog";
 import Image from "next/image";
 import { cn } from "@/utils/ui";
+
+function UndoRedoButtons() {
+	const editor = useEditor();
+	return (
+		<div className="flex items-center gap-1">
+			<Button
+				variant="outline"
+				size="icon"
+				title="復原 (Ctrl+Z)"
+				aria-label="復原"
+				onClick={() => editor.command.undo()}
+			>
+				<HugeiconsIcon icon={ArrowTurnBackwardIcon} className="size-4" />
+			</Button>
+			<Button
+				variant="outline"
+				size="icon"
+				title="重做 (Ctrl+Shift+Z)"
+				aria-label="重做"
+				onClick={() => editor.command.redo()}
+			>
+				<HugeiconsIcon icon={ArrowTurnForwardIcon} className="size-4" />
+			</Button>
+		</div>
+	);
+}
 
 export function EditorHeader() {
 	return (
@@ -34,6 +65,7 @@ export function EditorHeader() {
 				<EditableProjectName />
 			</div>
 			<nav className="flex items-center gap-2">
+				<UndoRedoButtons />
 				<ExportButton />
 				<ThemeToggle />
 			</nav>
