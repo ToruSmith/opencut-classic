@@ -107,6 +107,11 @@
   3. 在 `shader_tests.rs` 的 `SHADERS` 加上新檔案。**CI 的 `shaders` job 用 naga 驗證所有 WGSL**——瀏覽器要到執行時才編譯 shader,只要有一個寫錯,所有效果會一起壞掉,CI 的 build / Deploy 都抓不到。
   4. 在 `apps/web/src/effects/definitions/` 加定義並在 `index.ts` 註冊。
   - 沒有 GPU 可以實測:shader 通過 naga 只代表語法與型別正確,視覺結果要在瀏覽器確認。
+  - 效果的輸出貼圖由呼叫者提供(`apply_with_encoder` 的 `acquire` 參數):合成器傳入自己的 `TexturePool`,每格回收重用;
+    不要改回每個 pass 都 `create_render_texture`。效果不會修改輸入貼圖,所以 `apply_effect_groups` 不必先複製來源。
+  - 高斯模糊的取樣數依 σ 決定(±3.5σ,上限 ±30),不是固定 61 點。
+  - 風格化效果(`definitions/stylize.ts`):馬賽克 `pixelate`、色差 `chromatic-aberration`、色調分離 `posterize`。
+  - 效果面板會依參數的 `dependencies` 隱藏用不到的欄位。
 - **轉場(進出場動畫)**:`transitions/presets.ts` 是純函式,把動畫展開成關鍵影格(動畫基準值要從 `element.params` 讀,不是 `element.opacity` 這類不存在的欄位)。測試在 `transitions/__tests__/`。
 - 字幕解析(`subtitles/`)、字幕切段(`transcription/caption.ts`)也都是純函式,有測試;中文沒有空格,按標點與字數(12 字)切。
 

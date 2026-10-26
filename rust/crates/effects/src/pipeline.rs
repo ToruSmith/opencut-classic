@@ -21,6 +21,12 @@ const GLOW_SHADER_ID: &str = "glow";
 const GLOW_SHADER_SOURCE: &str = include_str!("shaders/glow.wgsl");
 const SPLIT_TONE_SHADER_ID: &str = "split-tone";
 const SPLIT_TONE_SHADER_SOURCE: &str = include_str!("shaders/split_tone.wgsl");
+const PIXELATE_SHADER_ID: &str = "pixelate";
+const PIXELATE_SHADER_SOURCE: &str = include_str!("shaders/pixelate.wgsl");
+const CHROMATIC_ABERRATION_SHADER_ID: &str = "chromatic-aberration";
+const CHROMATIC_ABERRATION_SHADER_SOURCE: &str = include_str!("shaders/chromatic_aberration.wgsl");
+const POSTERIZE_SHADER_ID: &str = "posterize";
+const POSTERIZE_SHADER_SOURCE: &str = include_str!("shaders/posterize.wgsl");
 
 pub struct ApplyEffectsOptions<'a> {
     pub source: &'a wgpu::Texture,
@@ -28,6 +34,9 @@ pub struct ApplyEffectsOptions<'a> {
     pub height: u32,
     pub passes: &'a [EffectPass],
 }
+
+/// 每個 pass 的輸出貼圖從哪裡來。合成器傳入自己的貼圖池,避免每格、每個 pass 都向 GPU 重新配置貼圖。
+pub type AcquireTexture<'a> = dyn FnMut(u32, u32) -> wgpu::Texture + 'a;
 
 pub struct EffectPipeline {
     uniform_bind_group_layout: wgpu::BindGroupLayout,
@@ -173,6 +182,21 @@ impl EffectPipeline {
                 SPLIT_TONE_SHADER_ID.to_string(),
                 build_pipeline("effects-split-tone", SPLIT_TONE_SHADER_SOURCE),
             ),
+            (
+                PIXELATE_SHADER_ID.to_string(),
+                build_pipeline("effects-pixelate", PIXELATE_SHADER_SOURCE),
+            ),
+            (
+                CHROMATIC_ABERRATION_SHADER_ID.to_string(),
+                build_pipeline(
+                    "effects-chromatic-aberration",
+                    CHROMATIC_ABERRATION_SHADER_SOURCE,
+                ),
+            ),
+            (
+                POSTERIZE_SHADER_ID.to_string(),
+                build_pipeline("effects-posterize", POSTERIZE_SHADER_SOURCE),
+            ),
         ]);
 
         Self {
@@ -197,6 +221,9 @@ impl EffectPipeline {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("effects-command-encoder"),
                 });
+        let mut acquire = |width: u32, height: u32| {
+            context.create_render_texture(width, height, "effects-pass-output")
+        };
         let output = self.apply_with_encoder(
             context,
             &mut encoder,
@@ -206,6 +233,7 @@ impl EffectPipeline {
                 height,
                 passes,
             },
+            &mut acquire,
         )?;
         context.queue().submit([encoder.finish()]);
         Ok(output)
@@ -221,13 +249,13 @@ impl EffectPipeline {
             height,
             passes,
         }: ApplyEffectsOptions<'_>,
+        acquire: &mut AcquireTexture<'_>,
     ) -> Result<wgpu::Texture, EffectsError> {
         let mut current_texture: Option<wgpu::Texture> = None;
 
         for pass in passes {
             let input_texture = current_texture.as_ref().unwrap_or(source);
-            let output_texture =
-                context.create_render_texture(width, height, "effects-pass-output");
+            let output_texture = acquire(width, height);
             let input_view = input_texture.create_view(&wgpu::TextureViewDescriptor::default());
             let output_view = output_texture.create_view(&wgpu::TextureViewDescriptor::default());
             let texture_bind_group =
@@ -443,6 +471,38 @@ fn pack_effect_uniforms(
                 read_number_uniform(pass, "u_highlight_hue")?,
                 read_number_uniform(pass, "u_highlight_amount")?,
             ],
+        });
+    }
+
+    if shader == PIXELATE_SHADER_ID {
+        reject_unknown_uniforms(pass, &["u_block"])?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [0.0, 0.0],
+            scalars: [read_number_uniform(pass, "u_block")?, 0.0, 0.0, 0.0],
+        });
+    }
+
+    if shader == CHROMATIC_ABERRATION_SHADER_ID {
+        reject_unknown_uniforms(pass, &["u_amount", "u_angle", "u_radial"])?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [0.0, 0.0],
+            scalars: [
+                read_number_uniform(pass, "u_amount")?,
+                read_number_uniform(pass, "u_angle")?,
+                read_number_uniform(pass, "u_radial")?,
+                0.0,
+            ],
+        });
+    }
+
+    if shader == POSTERIZE_SHADER_ID {
+        reject_unknown_uniforms(pass, &["u_levels"])?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [0.0, 0.0],
+            scalars: [read_number_uniform(pass, "u_levels")?, 0.0, 0.0, 0.0],
         });
     }
 

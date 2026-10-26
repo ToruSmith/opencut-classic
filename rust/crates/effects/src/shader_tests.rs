@@ -13,6 +13,12 @@ const SHADERS: &[(&str, &str)] = &[
     ("sharpen", include_str!("shaders/sharpen.wgsl")),
     ("glow", include_str!("shaders/glow.wgsl")),
     ("split_tone", include_str!("shaders/split_tone.wgsl")),
+    ("pixelate", include_str!("shaders/pixelate.wgsl")),
+    (
+        "chromatic_aberration",
+        include_str!("shaders/chromatic_aberration.wgsl"),
+    ),
+    ("posterize", include_str!("shaders/posterize.wgsl")),
 ];
 
 #[test]

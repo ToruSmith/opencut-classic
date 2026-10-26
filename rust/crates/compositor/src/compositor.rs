@@ -491,8 +491,17 @@ impl Compositor {
         height: u32,
         effect_pass_groups: &[Vec<EffectPassDescriptor>],
     ) -> Result<wgpu::Texture, CompositorError> {
-        let mut current = self.copy_texture(context, encoder, source, width, height);
+        // 效果每個 pass 都寫到新的貼圖、不會改動輸入,所以不用先把來源整張複製一份。
+        // 輸出貼圖向本格的貼圖池借,下一格再回收,避免每格重新配置 GPU 記憶體。
+        let mut current = source.clone();
+        let texture_pool = &mut self.texture_pool;
+        let mut acquire = |width: u32, height: u32| {
+            texture_pool.acquire(context, width, height, "effects-pass-output")
+        };
         for group in effect_pass_groups {
+            if group.is_empty() {
+                continue;
+            }
             let passes = map_effect_passes(group);
             current = self.effects.apply_with_encoder(
                 context,
@@ -503,6 +512,7 @@ impl Compositor {
                     height,
                     passes: &passes,
                 },
+                &mut acquire,
             )?;
         }
         Ok(current)

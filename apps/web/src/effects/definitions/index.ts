@@ -13,6 +13,11 @@ import {
 	vignetteEffectDefinition,
 } from "./color";
 import {
+	chromaticAberrationEffectDefinition,
+	pixelateEffectDefinition,
+	posterizeEffectDefinition,
+} from "./stylize";
+import {
 	coolLookEffectDefinition,
 	filmFadeLookEffectDefinition,
 	toneEffectDefinition,
@@ -33,6 +38,9 @@ const defaultEffects = [
 	sharpenEffectDefinition,
 	glowEffectDefinition,
 	splitToneEffectDefinition,
+	pixelateEffectDefinition,
+	chromaticAberrationEffectDefinition,
+	posterizeEffectDefinition,
 ];
 
 export function registerDefaultEffects(): void {

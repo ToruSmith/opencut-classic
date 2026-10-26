@@ -22,7 +22,11 @@ fn fragment_main(input: VertexOutput) -> @location(0) vec4f {
     var color = vec4f(0.0, 0.0, 0.0, 0.0);
     var total_weight = 0.0;
 
-    for (var index = -30; index <= 30; index = index + 1) {
+    // 高斯權重在 3.5σ 之外不到 0.3%,不必取樣。原本固定取 61 點;
+    // 預設強度(σ≈3)只需約 23 點,預覽畫布較小時更少。上限仍是 ±30。
+    // 迴圈上限只依 uniform,屬於一致控制流程,textureSample 可以放在裡面。
+    let radius = clamp(i32(ceil(3.5 * sigma / max(step_size, 0.0001))), 1, 30);
+    for (var index = -radius; index <= radius; index = index + 1) {
         let position = f32(index) * step_size;
         let weight = exp(-(position * position) / (2.0 * sigma * sigma));
         let sample_uv = input.tex_coord + (texel_size * uniforms.direction * position);

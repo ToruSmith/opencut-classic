@@ -289,7 +289,18 @@ function EffectSection({
 				className={cn("p-0", onToggle && !effect.enabled && "opacity-50")}
 			>
 				<SectionFields>
-					{definition.params.map((param) => (
+					{definition.params
+						.filter((param) =>
+							// 依附在其他參數的欄位(例如色差的「方向角度」只在固定方向時有用)
+							(param.dependencies ?? []).every((dependency) => {
+								const current =
+									renderParams[dependency.param] ??
+									definition.params.find((p) => p.key === dependency.param)
+										?.default;
+								return current === dependency.equals;
+							}),
+						)
+						.map((param) => (
 						<div key={param.key} className="flex flex-col gap-3.5">
 							<div className="px-4">
 								<PropertyParamField
