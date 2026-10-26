@@ -9,10 +9,22 @@
  */
 import { mock } from "bun:test";
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+
+/** 像 Node 一樣往上層目錄找 node_modules/opencut-wasm(bun workspace 會把套件提升到專案根目錄) */
+function findPackageDir(): string {
+	let dir = import.meta.dir;
+	for (;;) {
+		const candidate = join(dir, "node_modules", "opencut-wasm");
+		if (existsSync(candidate)) return candidate;
+		const parent = dirname(dir);
+		if (parent === dir) return join(import.meta.dir, "node_modules", "opencut-wasm");
+		dir = parent;
+	}
+}
 
 async function initializeWasmForTests(): Promise<void> {
-	const packageDir = join(import.meta.dir, "node_modules", "opencut-wasm");
+	const packageDir = findPackageDir();
 	if (!existsSync(join(packageDir, "opencut_wasm_bg.wasm"))) {
 		const list = (dir: string) => {
 			try {
