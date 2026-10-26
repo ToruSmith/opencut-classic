@@ -8,13 +8,26 @@
  * 測試用的是真正的 Rust 實作,不是另外寫一份 JavaScript。
  */
 import { mock } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 
 async function initializeWasmForTests(): Promise<void> {
 	const packageDir = join(import.meta.dir, "node_modules", "opencut-wasm");
 	if (!existsSync(join(packageDir, "opencut_wasm_bg.wasm"))) {
-		throw new Error(`找不到 ${packageDir}/opencut_wasm_bg.wasm`);
+		const list = (dir: string) => {
+			try {
+				return readdirSync(dir).join(", ");
+			} catch (error) {
+				return `(無法列出:${String(error)})`;
+			}
+		};
+		let real = "(不存在)";
+		try {
+			real = realpathSync(packageDir);
+		} catch {}
+		throw new Error(
+			`找不到 opencut_wasm_bg.wasm。packageDir=${packageDir} 實際位置=${real} 內容=[${list(packageDir)}] apps/web/node_modules=[${list(join(import.meta.dir, "node_modules"))}]`,
+		);
 	}
 
 	const glue = await import(join(packageDir, "opencut_wasm_bg.js"));
