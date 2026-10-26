@@ -1,6 +1,7 @@
 import { effectsRegistry } from "../registry";
 import { blurEffectDefinition } from "./blur";
 import { chromaKeyEffectDefinition } from "./chroma-key";
+import { lutEffectDefinition } from "./lut";
 import {
 	glowEffectDefinition,
 	sharpenEffectDefinition,
@@ -43,6 +44,7 @@ const defaultEffects = [
 	chromaticAberrationEffectDefinition,
 	posterizeEffectDefinition,
 	filmGrainEffectDefinition,
+	lutEffectDefinition,
 ];
 
 export function registerDefaultEffects(): void {

@@ -29,6 +29,13 @@ const POSTERIZE_SHADER_ID: &str = "posterize";
 const POSTERIZE_SHADER_SOURCE: &str = include_str!("shaders/posterize.wgsl");
 const FILM_GRAIN_SHADER_ID: &str = "film-grain";
 const FILM_GRAIN_SHADER_SOURCE: &str = include_str!("shaders/film_grain.wgsl");
+const LUT_SHADER_ID: &str = "lut";
+const LUT_SHADER_SOURCE: &str = include_str!("shaders/lut.wgsl");
+
+/// 需要第二張貼圖(group 2)的 shader
+fn requires_texture(shader: &str) -> bool {
+    shader == LUT_SHADER_ID
+}
 
 pub struct ApplyEffectsOptions<'a> {
     pub source: &'a wgpu::Texture,
@@ -111,7 +118,22 @@ impl EffectPipeline {
                     ],
                     immediate_size: 0,
                 });
-        let build_pipeline = |label: &str, source: &str| {
+        // LUT 這類 shader 多一組 group(2) 的貼圖 + 取樣器,格式和輸入貼圖相同
+        let textured_pipeline_layout =
+            context
+                .device()
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("effects-textured-pipeline-layout"),
+                    bind_group_layouts: &[
+                        Some(context.texture_sampler_bind_group_layout()),
+                        Some(&uniform_bind_group_layout),
+                        Some(context.texture_sampler_bind_group_layout()),
+                    ],
+                    immediate_size: 0,
+                });
+        let build_pipeline_with_layout = |label: &str,
+                                          source: &str,
+                                          layout: &wgpu::PipelineLayout| {
             let fragment_module =
                 context
                     .device()
@@ -123,7 +145,7 @@ impl EffectPipeline {
                 .device()
                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                     label: Some(label),
-                    layout: Some(&pipeline_layout),
+                    layout: Some(layout),
                     vertex: wgpu::VertexState {
                         module: &vertex_shader_module,
                         entry_point: Some("vertex_main"),
@@ -154,6 +176,9 @@ impl EffectPipeline {
                     multiview_mask: None,
                     cache: None,
                 })
+        };
+        let build_pipeline = |label: &str, source: &str| {
+            build_pipeline_with_layout(label, source, &pipeline_layout)
         };
         let pipelines = HashMap::from([
             (
@@ -202,6 +227,14 @@ impl EffectPipeline {
             (
                 FILM_GRAIN_SHADER_ID.to_string(),
                 build_pipeline("effects-film-grain", FILM_GRAIN_SHADER_SOURCE),
+            ),
+            (
+                LUT_SHADER_ID.to_string(),
+                build_pipeline_with_layout(
+                    "effects-lut",
+                    LUT_SHADER_SOURCE,
+                    &textured_pipeline_layout,
+                ),
             ),
         ]);
 
@@ -260,6 +293,10 @@ impl EffectPipeline {
         let mut current_texture: Option<wgpu::Texture> = None;
 
         for pass in passes {
+            // 需要第二張貼圖卻沒有(例如 LUT 檔還沒載入、或縮圖預覽):略過這個 pass
+            if requires_texture(&pass.shader) && pass.texture.is_none() {
+                continue;
+            }
             let input_texture = current_texture.as_ref().unwrap_or(source);
             let output_texture = acquire(width, height);
             let input_view = input_texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -300,6 +337,32 @@ impl EffectPipeline {
                             resource: uniform_buffer.as_entire_binding(),
                         }],
                     });
+            let extra_bind_group = match (&pass.texture, requires_texture(&pass.shader)) {
+                (Some(texture), true) => {
+                    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+                    Some(
+                        context
+                            .device()
+                            .create_bind_group(&wgpu::BindGroupDescriptor {
+                                label: Some("effects-extra-texture-bind-group"),
+                                layout: context.texture_sampler_bind_group_layout(),
+                                entries: &[
+                                    wgpu::BindGroupEntry {
+                                        binding: 0,
+                                        resource: wgpu::BindingResource::TextureView(&view),
+                                    },
+                                    wgpu::BindGroupEntry {
+                                        binding: 1,
+                                        resource: wgpu::BindingResource::Sampler(
+                                            context.linear_sampler(),
+                                        ),
+                                    },
+                                ],
+                            }),
+                    )
+                }
+                _ => None,
+            };
             let pipeline = self.pipelines.get(&pass.shader).ok_or_else(|| {
                 EffectsError::UnknownEffectShader {
                     shader: pass.shader.clone(),
@@ -327,13 +390,20 @@ impl EffectPipeline {
                 render_pass.set_vertex_buffer(0, context.fullscreen_quad().slice(..));
                 render_pass.set_bind_group(0, &texture_bind_group, &[]);
                 render_pass.set_bind_group(1, &uniform_bind_group, &[]);
+                if let Some(extra_bind_group) = &extra_bind_group {
+                    render_pass.set_bind_group(2, extra_bind_group, &[]);
+                }
                 render_pass.draw(0..6, 0..1);
             }
 
             current_texture = Some(output_texture);
         }
 
-        current_texture.ok_or(EffectsError::MissingEffectPasses)
+        if passes.is_empty() {
+            return Err(EffectsError::MissingEffectPasses);
+        }
+        // 全部 pass 都被略過時原圖照常輸出
+        Ok(current_texture.unwrap_or_else(|| source.clone()))
     }
 }
 
@@ -525,6 +595,20 @@ fn pack_effect_uniforms(
                 read_number_uniform(pass, "u_size")?,
                 read_number_uniform(pass, "u_seed")?,
                 read_number_uniform(pass, "u_color")?,
+            ],
+        });
+    }
+
+    if shader == LUT_SHADER_ID {
+        reject_unknown_uniforms(pass, &["u_size", "u_cols", "u_rows", "u_intensity"])?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [0.0, 0.0],
+            scalars: [
+                read_number_uniform(pass, "u_size")?,
+                read_number_uniform(pass, "u_cols")?,
+                read_number_uniform(pass, "u_rows")?,
+                read_number_uniform(pass, "u_intensity")?,
             ],
         });
     }

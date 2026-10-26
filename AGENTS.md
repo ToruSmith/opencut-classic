@@ -81,8 +81,14 @@
   `MediaAsset.proxyFile` 只在預覽品質使用(`resolve.ts` 的 `pickVideoSource`,videoCache key 是 `<id>@proxy`),匯出與快照一律讀原始檔。
 - **交叉溶解**:`transitions/cross-dissolve.ts`(純函式)找出重疊的前後兩段,上層片段做不透明度關鍵影格、聲音用上面的淡化參數;
   套用時用 `timeline.applyElementEdits` 合成一個復原步驟。同一條軌道的片段不能重疊,所以溶接一定是跨軌道。
-- **LUT 尚未支援**:效果管線每個 pass 只綁一張輸入貼圖與 8 個浮點數的 uniform,要支援 .cube 需要在 `pipeline.rs` 加第二個貼圖綁定、
-  在 bridge 傳 LUT 資料、並把 LUT 檔存進專案。
+- **LUT(.cube)**:解析與打包在 `lut/cube.ts`(純函式,有測試),存在專案的 `project.luts`(id → 名稱、邊長、base64 RGB8)。
+  匯入時重新取樣到 0..1 定義域、最多 33³,所以備份與版本紀錄會自動帶著(約 140 KB/個)。id 由內容決定,同一個檔案只存一份;
+  目前沒有刪除 LUT 的介面,沒用到的也會留在專案裡。
+  - 渲染:`lut/store.ts` 是記憶體快取(載入專案、匯入時登記)。LUT 效果的 pass 帶 `textureId: "lut:<id>"`,
+    `frame-descriptor.ts` 的 `attachEffectTextures` 把它當成「rendered」貼圖上傳(N 張切片排成接近正方形的格子,33 → 198×198),
+    找不到資料的 pass 會被拿掉。Rust 端 `EffectPassDescriptor.texture_id` → `EffectPass.texture`,LUT 管線多綁一組 group(2)。
+  - 需要第二張貼圖卻沒拿到的 pass(縮圖預覽的 `applyEffectPasses` 沒有貼圖庫)在 Rust 會被略過,原圖照常輸出。
+  - 介面:`effects/components/lut-picker.tsx`,參數 `lut` 設為 `hidden`(`BaseParamDefinition.hidden`,兩個屬性面板都會略過)。
 
 ## 專案儲存、備份與重新連結(2026-10)
 
@@ -112,7 +118,10 @@
   - `uploadTexture`:同 id、同尺寸時直接覆寫原貼圖(`Compositor::reusable_texture` + `GpuContext::write_offscreen_canvas_to_texture`),
     播放中的影片不再每格配置新貼圖。
   - 高斯模糊的取樣數依 σ 決定(±3.5σ,上限 ±30),不是固定 61 點。
-  - 風格化效果(`definitions/stylize.ts`):馬賽克 `pixelate`、色差 `chromatic-aberration`、色調分離 `posterize`。
+  - 風格化效果(`definitions/stylize.ts`):馬賽克 `pixelate`、色差 `chromatic-aberration`、色調分離 `posterize`、底片顆粒 `film-grain`。
+  - 效果定義的 `uniforms` / `buildPasses` 會拿到 `time`(片段開頭起算的秒數,縮圖為 0),會動的效果用它當種子。
+    底片顆粒每秒換 24 次圖樣,和匯出幀率無關。
+  - 遮罩羽化(`masks` crate)的 JFA 中間貼圖也由呼叫者的 `acquire` 提供,合成器傳入貼圖池。
   - 效果面板會依參數的 `dependencies` 隱藏用不到的欄位。
 - **轉場(進出場動畫)**:`transitions/presets.ts` 是純函式,把動畫展開成關鍵影格(動畫基準值要從 `element.params` 讀,不是 `element.opacity` 這類不存在的欄位)。測試在 `transitions/__tests__/`。
 - 字幕解析(`subtitles/`)、字幕切段(`transcription/caption.ts`)也都是純函式,有測試;中文沒有空格,按標點與字數(12 字)切。

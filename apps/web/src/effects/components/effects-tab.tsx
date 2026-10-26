@@ -25,6 +25,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { cn } from "@/utils/ui";
 import { Separator } from "@/components/ui/separator";
+import { LutPicker } from "./lut-picker";
 import { useAssetsPanelStore } from "@/components/editor/panels/assets/assets-panel-store";
 
 export function StandaloneEffectTab({
@@ -289,10 +290,26 @@ function EffectSection({
 				className={cn("p-0", onToggle && !effect.enabled && "opacity-50")}
 			>
 				<SectionFields>
+					{definition.type === "lut" && (
+						<div className="flex flex-col gap-3.5">
+							<div className="px-4">
+								<LutPicker
+									value={String(renderParams.lut ?? "")}
+									onChange={(id) => {
+										previewParam("lut")(id);
+										onCommit();
+									}}
+								/>
+							</div>
+							<Separator />
+						</div>
+					)}
 					{definition.params
-						.filter((param) =>
-							// 依附在其他參數的欄位(例如色差的「方向角度」只在固定方向時有用)
-							(param.dependencies ?? []).every((dependency) => {
+						.filter(
+							(param) =>
+								!param.hidden &&
+								// 依附在其他參數的欄位(例如色差的「方向角度」只在固定方向時有用)
+								(param.dependencies ?? []).every((dependency) => {
 								const current =
 									renderParams[dependency.param] ??
 									definition.params.find((p) => p.key === dependency.param)

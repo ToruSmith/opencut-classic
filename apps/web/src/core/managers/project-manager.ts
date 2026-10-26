@@ -29,6 +29,8 @@ import { DEFAULTS } from "@/timeline/defaults";
 import { getElementFontFamilies } from "@/timeline/element-utils";
 import { getRaisedProjectFpsForImportedMedia } from "@/fps/utils";
 import type { MediaAsset } from "@/media/types";
+import { parseCubeLut, storedLutId, toStoredLut } from "@/lut/cube";
+import { registerLuts } from "@/lut/store";
 
 export interface MigrationState {
 	isMigrating: boolean;
@@ -168,6 +170,7 @@ export class ProjectManager {
 
 			const project = result.project;
 
+			registerLuts({ luts: project.luts });
 			this.active = project;
 			this.notify();
 
@@ -783,6 +786,35 @@ export class ProjectManager {
 	 */
 	getActiveOrNull(): TProject | null {
 		return this.active;
+	}
+
+	/**
+	 * 匯入 .cube 檔,存進目前專案並回傳 id。同內容的 LUT 只存一份。
+	 * 解析失敗會丟 LutParseError(訊息是給使用者看的中文)。
+	 */
+	async addLutFromFile({ file }: { file: File }): Promise<string> {
+		if (!this.active) throw new Error("No active project");
+		const parsed = parseCubeLut({ text: await file.text() });
+		const name = parsed.title || file.name.replace(/\.cube$/i, "");
+		const stored = toStoredLut({ lut: parsed, name });
+		const id = storedLutId({ lut: stored });
+		if (!this.active.luts?.[id]) {
+			this.active = {
+				...this.active,
+				luts: { ...this.active.luts, [id]: stored },
+			};
+			this.editor.save.markDirty();
+		}
+		registerLuts({ luts: { [id]: stored } });
+		this.notify();
+		return id;
+	}
+
+	getLuts(): Array<{ id: string; name: string }> {
+		return Object.entries(this.active?.luts ?? {}).map(([id, lut]) => ({
+			id,
+			name: lut.name,
+		}));
 	}
 
 	getTimelineViewState(): TTimelineViewState {

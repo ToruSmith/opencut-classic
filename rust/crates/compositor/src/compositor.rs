@@ -517,7 +517,7 @@ impl Compositor {
             if group.is_empty() {
                 continue;
             }
-            let passes = map_effect_passes(group);
+            let passes = map_effect_passes(group, &self.textures);
             current = self.effects.apply_with_encoder(
                 context,
                 encoder,
@@ -874,11 +874,16 @@ impl Compositor {
     }
 }
 
-fn map_effect_passes(passes: &[EffectPassDescriptor]) -> Vec<EffectPass> {
+fn map_effect_passes(passes: &[EffectPassDescriptor], textures: &TextureStore) -> Vec<EffectPass> {
     passes
         .iter()
         .map(|pass| EffectPass {
             shader: pass.shader.clone(),
+            texture: pass
+                .texture_id
+                .as_deref()
+                .and_then(|id| textures.get(id))
+                .map(|stored| stored.texture().clone()),
             uniforms: pass
                 .uniforms
                 .iter()

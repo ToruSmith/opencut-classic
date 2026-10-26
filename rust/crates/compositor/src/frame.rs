@@ -65,6 +65,9 @@ pub struct LayerMaskDescriptor {
 pub struct EffectPassDescriptor {
     pub shader: String,
     pub uniforms: HashMap<String, EffectUniformValueDescriptor>,
+    /// 第二張輸入貼圖(例如 LUT)的 id,指向已用 uploadTexture 上傳的貼圖
+    #[serde(default)]
+    pub texture_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

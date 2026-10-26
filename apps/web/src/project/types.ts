@@ -1,6 +1,7 @@
 import type { FrameRate } from "opencut-wasm";
 import type { TScene } from "@/timeline/types";
 import type { MediaTime } from "@/wasm";
+import type { StoredLut } from "@/lut/cube";
 
 export type TBackground =
 	| {
@@ -48,6 +49,8 @@ export interface TProject {
 	settings: TProjectSettings;
 	version: number;
 	timelineViewState?: TTimelineViewState;
+	/** 匯入的 3D LUT(id → 資料),LUT 調色效果用 `lut` 參數指向這裡 */
+	luts?: Record<string, StoredLut>;
 }
 
 export type TProjectSortKey = "createdAt" | "updatedAt" | "name" | "duration";

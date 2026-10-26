@@ -135,6 +135,7 @@ function isVisible({
 	param: ElementParamDefinition;
 	values: ParamValues;
 }): boolean {
+	if (param.hidden) return false;
 	return (param.dependencies ?? []).every((dependency) =>
 		areParamValuesEqual({
 			left: values[dependency.param],

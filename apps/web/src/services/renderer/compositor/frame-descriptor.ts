@@ -1,3 +1,4 @@
+import { getLutTextureByTextureId } from "@/lut/store";
 import { drawCssBackground } from "@/gradients";
 import { getMaskDefinition } from "@/masks";
 import { incrementCounter } from "@/diagnostics/render-perf";
@@ -47,6 +48,8 @@ export async function buildFrameDescriptor({
 		items,
 		textures,
 	});
+
+	attachEffectTextures({ items, textures });
 
 	incrementCounter({ name: "frameItems", by: items.length });
 	incrementCounter({ name: "frameTextures", by: textures.size });
@@ -578,4 +581,39 @@ function identityKey(source: CanvasImageSource): string {
 		return `@${key}`;
 	}
 	return "@?";
+}
+
+/**
+ * 效果 pass 若指定了第二張貼圖(目前只有 LUT),把貼圖加入本格的上傳清單。
+ * 找不到資料的 pass 直接拿掉,避免 Rust 端拿到不存在的貼圖 id。
+ * LUT 內容不會變,contentHash 用 id 就好:同一個 LUT 只在第一次出現時上傳。
+ */
+function attachEffectTextures({
+	items,
+	textures,
+}: {
+	items: FrameItemDescriptor[];
+	textures: Map<string, TextureUploadDescriptor>;
+}): void {
+	for (const item of items) {
+		item.effectPassGroups = item.effectPassGroups.map((group) =>
+			group.filter((pass) => {
+				if (!pass.textureId) return true;
+				if (textures.has(pass.textureId)) return true;
+				const lut = getLutTextureByTextureId({ textureId: pass.textureId });
+				if (!lut) return false;
+				textures.set(pass.textureId, {
+					kind: "rendered",
+					id: pass.textureId,
+					contentHash: pass.textureId,
+					width: lut.width,
+					height: lut.height,
+					draw: (ctx) => {
+						ctx.putImageData(new ImageData(lut.pixels, lut.width, lut.height), 0, 0);
+					},
+				});
+				return true;
+			}),
+		);
+	}
 }

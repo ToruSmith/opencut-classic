@@ -71,6 +71,8 @@ fn map_effect_passes(effect_passes: Vec<EffectPassInput>) -> Vec<EffectPass> {
         .into_iter()
         .map(|pass| EffectPass {
             shader: pass.shader,
+            // 單獨套效果(縮圖預覽)沒有貼圖庫,需要第二張貼圖的 pass 會被略過
+            texture: None,
             uniforms: pass
                 .uniforms
                 .into_iter()

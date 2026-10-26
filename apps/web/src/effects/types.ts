@@ -12,6 +12,11 @@ export type EffectUniformValue = number | number[];
 export interface EffectPass {
 	shader: string;
 	uniforms: Record<string, EffectUniformValue>;
+	/**
+	 * 第二張輸入貼圖(例如 LUT)。frame-descriptor 會依 id 找到資料並上傳;
+	 * 找不到時把這個 pass 拿掉。對應 Rust 的 EffectPassDescriptor.texture_id。
+	 */
+	textureId?: string;
 }
 
 export interface EffectPassTemplate {

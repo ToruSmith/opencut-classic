@@ -272,6 +272,7 @@ class StorageService {
 			settings: project.settings,
 			version: project.version,
 			timelineViewState: project.timelineViewState,
+			luts: project.luts,
 		};
 
 		await this.projectsAdapter.set({
@@ -332,6 +333,7 @@ class StorageService {
 			settings: serializedProject.settings,
 			version: serializedProject.version,
 			timelineViewState: serializedProject.timelineViewState,
+			luts: serializedProject.luts,
 		};
 
 		return { project };

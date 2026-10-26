@@ -178,6 +178,8 @@ interface BaseParamDefinition<TKey extends string = string> {
 	group?: ParamGroup;
 	keyframable?: boolean;
 	dependencies?: Array<{ param: string; equals: ParamValue }>;
+	/** 不在屬性面板顯示(由專用的元件設定,例如 LUT 的檔案選擇器) */
+	hidden?: boolean;
 }
 
 export interface NumberParamDefinition<TKey extends string = string>
