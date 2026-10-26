@@ -10,6 +10,9 @@ const SHADERS: &[(&str, &str)] = &[
     ("color_grade", include_str!("shaders/color_grade.wgsl")),
     ("tone", include_str!("shaders/tone.wgsl")),
     ("chroma_key", include_str!("shaders/chroma_key.wgsl")),
+    ("sharpen", include_str!("shaders/sharpen.wgsl")),
+    ("glow", include_str!("shaders/glow.wgsl")),
+    ("split_tone", include_str!("shaders/split_tone.wgsl")),
 ];
 
 #[test]

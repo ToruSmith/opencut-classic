@@ -2,6 +2,11 @@ import { effectsRegistry } from "../registry";
 import { blurEffectDefinition } from "./blur";
 import { chromaKeyEffectDefinition } from "./chroma-key";
 import {
+	glowEffectDefinition,
+	sharpenEffectDefinition,
+	splitToneEffectDefinition,
+} from "./detail";
+import {
 	colorAdjustEffectDefinition,
 	grayscaleEffectDefinition,
 	sepiaEffectDefinition,
@@ -25,6 +30,9 @@ const defaultEffects = [
 	warmLookEffectDefinition,
 	coolLookEffectDefinition,
 	filmFadeLookEffectDefinition,
+	sharpenEffectDefinition,
+	glowEffectDefinition,
+	splitToneEffectDefinition,
 ];
 
 export function registerDefaultEffects(): void {

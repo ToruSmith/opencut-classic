@@ -15,6 +15,12 @@ const TONE_SHADER_ID: &str = "tone";
 const TONE_SHADER_SOURCE: &str = include_str!("shaders/tone.wgsl");
 const CHROMA_KEY_SHADER_ID: &str = "chroma-key";
 const CHROMA_KEY_SHADER_SOURCE: &str = include_str!("shaders/chroma_key.wgsl");
+const SHARPEN_SHADER_ID: &str = "sharpen";
+const SHARPEN_SHADER_SOURCE: &str = include_str!("shaders/sharpen.wgsl");
+const GLOW_SHADER_ID: &str = "glow";
+const GLOW_SHADER_SOURCE: &str = include_str!("shaders/glow.wgsl");
+const SPLIT_TONE_SHADER_ID: &str = "split-tone";
+const SPLIT_TONE_SHADER_SOURCE: &str = include_str!("shaders/split_tone.wgsl");
 
 pub struct ApplyEffectsOptions<'a> {
     pub source: &'a wgpu::Texture,
@@ -154,6 +160,18 @@ impl EffectPipeline {
             (
                 CHROMA_KEY_SHADER_ID.to_string(),
                 build_pipeline("effects-chroma-key", CHROMA_KEY_SHADER_SOURCE),
+            ),
+            (
+                SHARPEN_SHADER_ID.to_string(),
+                build_pipeline("effects-sharpen", SHARPEN_SHADER_SOURCE),
+            ),
+            (
+                GLOW_SHADER_ID.to_string(),
+                build_pipeline("effects-glow", GLOW_SHADER_SOURCE),
+            ),
+            (
+                SPLIT_TONE_SHADER_ID.to_string(),
+                build_pipeline("effects-split-tone", SPLIT_TONE_SHADER_SOURCE),
             ),
         ]);
 
@@ -377,6 +395,57 @@ fn pack_effect_uniforms(
         });
     }
 
+    if shader == SHARPEN_SHADER_ID {
+        reject_unknown_uniforms(pass, &["u_amount", "u_radius"])?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [0.0, 0.0],
+            scalars: [
+                read_number_uniform(pass, "u_amount")?,
+                read_number_uniform(pass, "u_radius")?,
+                0.0,
+                0.0,
+            ],
+        });
+    }
+
+    if shader == GLOW_SHADER_ID {
+        reject_unknown_uniforms(pass, &["u_intensity", "u_radius", "u_threshold"])?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [0.0, 0.0],
+            scalars: [
+                read_number_uniform(pass, "u_intensity")?,
+                read_number_uniform(pass, "u_radius")?,
+                read_number_uniform(pass, "u_threshold")?,
+                0.0,
+            ],
+        });
+    }
+
+    if shader == SPLIT_TONE_SHADER_ID {
+        reject_unknown_uniforms(
+            pass,
+            &[
+                "u_shadow_hue",
+                "u_shadow_amount",
+                "u_highlight_hue",
+                "u_highlight_amount",
+                "u_balance",
+            ],
+        )?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [read_number_uniform(pass, "u_balance")?, 0.0],
+            scalars: [
+                read_number_uniform(pass, "u_shadow_hue")?,
+                read_number_uniform(pass, "u_shadow_amount")?,
+                read_number_uniform(pass, "u_highlight_hue")?,
+                read_number_uniform(pass, "u_highlight_amount")?,
+            ],
+        });
+    }
+
     let sigma = read_number_uniform(pass, "u_sigma")?;
     let step = read_number_uniform(pass, "u_step")?;
     let direction = read_vec2_uniform(pass, "u_direction")?;
@@ -396,6 +465,18 @@ fn pack_effect_uniforms(
         direction,
         scalars: [sigma, step, 0.0, 0.0],
     })
+}
+
+fn reject_unknown_uniforms(pass: &EffectPass, known: &[&str]) -> Result<(), EffectsError> {
+    for uniform in pass.uniforms.keys() {
+        if !known.contains(&uniform.as_str()) {
+            return Err(EffectsError::UnsupportedUniform {
+                shader: pass.shader.clone(),
+                uniform: uniform.clone(),
+            });
+        }
+    }
+    Ok(())
 }
 
 fn read_number_uniform(pass: &EffectPass, uniform: &str) -> Result<f32, EffectsError> {
