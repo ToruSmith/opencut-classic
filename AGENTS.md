@@ -61,8 +61,28 @@
 - **單元測試有「棘輪」**:CI 的測試步驟(`.github/scripts/test-ratchet.sh`)會把失敗的測試與 `.github/known-failing-tests.txt` 比對——清單以外的新失敗會讓 CI 失敗(Deploy 不會發佈);已修好的會提醒你從清單刪掉。整個測試檔載入失敗(bun 只印 `Unhandled error`、沒有 `(fail)`)也算失敗。
 - `apps/web/test-setup.ts`(由 `bunfig.toml` 預載)用真正的 WASM 初始化 `opencut-wasm`。bun 不支援 wasm-pack bundler 目標的 ESM 匯入 .wasm,沒有這一步,依賴 WASM 的 `const`(像 `ZERO_MEDIA_TIME`)會在模組載入到一半時丟錯。本機沒有 node_modules 時這個預載會失敗並印警告,測試仍會跑,只是依賴 WASM 的會失敗。
 - 目前已知失敗 3 個(都在遮罩,原因寫在 `known-failing-tests.txt`),需要有人判斷是測試過時還是程式要改。
+- 刪除素材後「復原」:素材檔在刪除當下就從 OPFS 移除,復原時用的是記憶體裡的 `File`。OPFS 的 `File` 在檔案被刪後可能無法再讀
+  (Chrome 會丟 `NotReadableError`),所以復原可能救不回素材。尚未修(要改成延後刪除)。
 - 日誌下載被擋,只能讀 annotations。
 - Rust release 使用 `lto` + `codegen-units=1`(Cargo.toml),CI 的 wasm 步驟會比以前慢一些。
+
+## 音訊淡入淡出、版本紀錄、代理檔(2026-10 新增)
+
+- **音訊淡化**存在 `element.params.audioFadeIn` / `audioFadeOut`(秒),規則在 `timeline/audio-fade.ts`(純函式,有測試)。
+  `resolveEffectiveAudioGain` 會乘上淡化係數,所以預覽、匯出、轉錄、波形都自動套用。
+  判斷「增益會不會隨時間變」要用 `hasTimeVaryingGain`,不要只看 `hasAnimatedVolume`,否則淡化會被忽略。
+  預覽的逐段播放路徑(`runClipIterator`)每一段各自排增益曲線;分割片段時左半留淡入、右半留淡出。
+- **`previewElements` 的 `params` 是整包取代**,不是合併:拖曳類 UI 一定要 `{ ...element.params, key: value }`。
+- **版本紀錄**:獨立的 IndexedDB `video-editor-snapshots`,規則在 `services/storage/snapshot-policy.ts`。
+  只存專案 JSON、不存素材;還原前會先強制存一份目前狀態,還原後重跑儲存遷移。
+- **備份時間**記在 localStorage `opencut-last-backup`(專案 id → ms)。
+- **代理檔**:OPFS `media-proxies-<projectId>`,`media/proxy.ts` 用 mediabunny Conversion 產生
+  (`trim.start = 0` 保持時間戳和原始檔一致、0.5 秒一個關鍵影格、不含音訊)。
+  `MediaAsset.proxyFile` 只在預覽品質使用(`resolve.ts` 的 `pickVideoSource`,videoCache key 是 `<id>@proxy`),匯出與快照一律讀原始檔。
+- **交叉溶解**:`transitions/cross-dissolve.ts`(純函式)找出重疊的前後兩段,上層片段做不透明度關鍵影格、聲音用上面的淡化參數;
+  套用時用 `timeline.applyElementEdits` 合成一個復原步驟。同一條軌道的片段不能重疊,所以溶接一定是跨軌道。
+- **LUT 尚未支援**:效果管線每個 pass 只綁一張輸入貼圖與 8 個浮點數的 uniform,要支援 .cube 需要在 `pipeline.rs` 加第二個貼圖綁定、
+  在 bridge 傳 LUT 資料、並把 LUT 檔存進專案。
 
 ## 新增效果 / 轉場
 

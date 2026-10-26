@@ -522,6 +522,56 @@ export class TimelineManager {
 		this.editor.command.execute({ command });
 	}
 
+	/**
+	 * 一次套用參數修改與關鍵影格(例如交叉溶解),合成一個復原步驟。
+	 * 參數修改先做、關鍵影格後做;params 會整包取代,呼叫端要帶上原本的其他參數。
+	 */
+	applyElementEdits({
+		paramUpdates,
+		keyframes,
+	}: {
+		paramUpdates: Array<{
+			trackId: string;
+			elementId: string;
+			params: ParamValues;
+		}>;
+		keyframes: Array<{
+			trackId: string;
+			elementId: string;
+			propertyPath: AnimationPath;
+			time: MediaTime;
+			value: ParamValue;
+		}>;
+	}): void {
+		const commands = [
+			...(paramUpdates.length > 0
+				? [
+						new UpdateElementsCommand({
+							updates: paramUpdates.map(({ trackId, elementId, params }) => ({
+								trackId,
+								elementId,
+								patch: { params },
+							})),
+						}),
+					]
+				: []),
+			...keyframes.map(
+				({ trackId, elementId, propertyPath, time, value }) =>
+					new UpsertKeyframeCommand({
+						trackId,
+						elementId,
+						propertyPath,
+						time,
+						value,
+					}),
+			),
+		];
+		if (commands.length === 0) return;
+		const command =
+			commands.length === 1 ? commands[0] : new BatchCommand(commands);
+		this.editor.command.execute({ command });
+	}
+
 	removeKeyframes({
 		keyframes,
 	}: {

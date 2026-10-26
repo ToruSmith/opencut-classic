@@ -6,7 +6,18 @@ import { PanelView } from "@/components/editor/panels/assets/views/base-panel";
 import { Button } from "@/components/ui/button";
 import { useEditor } from "@/editor/use-editor";
 import { isSourceAudioEnabled } from "@/timeline/audio-separation";
-import { mediaTimeFromSeconds, mediaTimeToSeconds } from "@/wasm";
+import {
+	mediaTime,
+	mediaTimeFromSeconds,
+	mediaTimeToSeconds,
+	TICKS_PER_SECOND,
+} from "@/wasm";
+import {
+	AUDIO_FADE_IN_KEY,
+	AUDIO_FADE_OUT_KEY,
+} from "@/timeline/audio-fade";
+import type { ParamValues } from "@/params";
+import { planCrossDissolve } from "./cross-dissolve";
 import {
 	buildTransitionKeyframes,
 	type TransitionMotion,
@@ -120,9 +131,105 @@ export function TransitionsView() {
 		editor.timeline.upsertKeyframes({ keyframes });
 	};
 
+	const applyCrossDissolve = () => {
+		const selected = editor.selection.getSelectedElements();
+		if (selected.length !== 1) {
+			toast.error("請在時間軸選取一段片段(前一段或後一段都可以)");
+			return;
+		}
+		const tracks = editor.scenes.getActiveScene().tracks;
+		const plan = planCrossDissolve({
+			tracks,
+			trackId: selected[0].trackId,
+			elementId: selected[0].elementId,
+		});
+		if (!plan.ok) {
+			toast.error(plan.reason);
+			return;
+		}
+
+		const paramUpdates: Array<{
+			trackId: string;
+			elementId: string;
+			params: ParamValues;
+		}> = [];
+		const keyframes: Parameters<
+			typeof editor.timeline.applyElementEdits
+		>[0]["keyframes"] = [];
+
+		for (const action of plan.actions) {
+			const item = editor.timeline.getElementsWithTracks({
+				elements: [{ trackId: action.trackId, elementId: action.elementId }],
+			})[0];
+			if (!item) continue;
+			const { element } = item;
+			if (action.kind === "audio") {
+				// 同一個片段可能前面已經改過參數(例如同時有淡入與淡出),要接續累加
+				const pending = paramUpdates.find(
+					(update) =>
+						update.trackId === action.trackId &&
+						update.elementId === action.elementId,
+				);
+				const key = action.side === "in" ? AUDIO_FADE_IN_KEY : AUDIO_FADE_OUT_KEY;
+				const seconds =
+					Math.round((action.duration / TICKS_PER_SECOND) * 100) / 100;
+				if (pending) {
+					pending.params = { ...pending.params, [key]: seconds };
+				} else {
+					paramUpdates.push({
+						trackId: action.trackId,
+						elementId: action.elementId,
+						params: { ...element.params, [key]: seconds },
+					});
+				}
+				continue;
+			}
+
+			const baseOpacity =
+				typeof element.params.opacity === "number" ? element.params.opacity : 1;
+			const fadeStart =
+				action.side === "in" ? 0 : element.duration - action.duration;
+			const fadeEnd = action.side === "in" ? action.duration : element.duration;
+			keyframes.push(
+				{
+					trackId: action.trackId,
+					elementId: action.elementId,
+					propertyPath: "opacity",
+					time: mediaTime({ ticks: Math.max(0, Math.round(fadeStart)) }),
+					value: action.side === "in" ? 0 : baseOpacity,
+				},
+				{
+					trackId: action.trackId,
+					elementId: action.elementId,
+					propertyPath: "opacity",
+					time: mediaTime({ ticks: Math.max(0, Math.round(fadeEnd)) }),
+					value: action.side === "in" ? baseOpacity : 0,
+				},
+			);
+		}
+
+		editor.timeline.applyElementEdits({ paramUpdates, keyframes });
+		toast.success(
+			`已套用交叉溶解(${(plan.overlap / TICKS_PER_SECOND).toFixed(2)} 秒)`,
+		);
+	};
+
 	return (
 		<PanelView title="轉場">
 			<div className="flex flex-col gap-4">
+				<div className="flex flex-col gap-2">
+					<span className="text-muted-foreground text-xs">兩段之間</span>
+					<Button
+						variant="outline"
+						className="h-auto flex-col items-start gap-0.5 py-2"
+						onClick={applyCrossDissolve}
+					>
+						<span>交叉溶解</span>
+						<span className="text-muted-foreground text-left text-xs font-normal whitespace-normal">
+							後一段放在另一條軌道、開頭和前一段重疊,選取其中一段後按下;重疊多長,轉場就多長(畫面與聲音)
+						</span>
+					</Button>
+				</div>
 				<div className="flex flex-col gap-2">
 					<span className="text-muted-foreground text-xs">套用在</span>
 					<div className="flex gap-1">
@@ -184,7 +291,7 @@ export function TransitionsView() {
 				</div>
 				<p className="text-muted-foreground text-xs leading-relaxed">
 					先在時間軸選取片段(可多選)再按下。動畫以關鍵影格實作,之後可以在屬性面板或曲線編輯器微調,也可用「復原」撤銷。
-					要做「溶接」:把後一段拖到上方另一條軌道、與前一段重疊,再分別對兩段套用淡入與淡出即可。
+					音訊的淡入淡出也可以直接拖曳時間軸上音訊片段左上、右上角的圓點,或在屬性面板輸入秒數。
 				</p>
 			</div>
 		</PanelView>
