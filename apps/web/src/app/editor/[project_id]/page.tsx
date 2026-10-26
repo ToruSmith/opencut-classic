@@ -16,7 +16,8 @@ import { MigrationDialog } from "@/project/components/migration-dialog";
 import { usePanelStore } from "@/editor/panel-store";
 import { usePasteMedia } from "@/media/use-paste-media";
 import { MobileGate } from "@/components/editor/mobile-gate";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { RelinkMediaDialog } from "@/project/components/relink-media-dialog";
 import { useEditor } from "@/editor/use-editor";
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -42,6 +43,7 @@ export default function Editor() {
 			<EditorProvider projectId={projectId}>
 				<div className="bg-background flex h-screen w-screen flex-col overflow-hidden">
 					<DegradedRendererBanner />
+					<MissingMediaBanner />
 					<EditorHeader />
 					<div className="min-h-0 min-w-0 flex-1">
 						<EditorLayout />
@@ -71,6 +73,56 @@ function DegradedRendererBanner() {
 				<HugeiconsIcon icon={Cancel01Icon} />
 			</Button>
 		</div>
+	);
+}
+
+/** 專案裡有素材只有記錄、沒有檔案時(例如匯入「只存專案」的備份),提示重新連結 */
+function MissingMediaBanner() {
+	const editor = useEditor();
+	const activeProject = useEditor((e) => e.project.getActiveOrNull());
+	const projectId = activeProject?.metadata.id ?? null;
+	const [missingCount, setMissingCount] = useState(0);
+	const [isDialogOpen, setIsDialogOpen] = useState(false);
+	const [checkToken, setCheckToken] = useState(0);
+
+	useEffect(() => {
+		if (!projectId) {
+			setMissingCount(0);
+			return;
+		}
+		let cancelled = false;
+		editor.project
+			.listMissingMedia({ id: projectId })
+			.then((list) => {
+				if (!cancelled) setMissingCount(list.length);
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	}, [editor, projectId, checkToken]);
+
+	if (!projectId || !activeProject || missingCount === 0) return null;
+
+	return (
+		<>
+			<div className="bg-accent border-b h-9 flex items-center justify-center gap-3 text-xs">
+				<span>有 {missingCount} 個素材找不到檔案,時間軸上用到它們的片段不會顯示。</span>
+				<Button size="sm" variant="outline" onClick={() => setIsDialogOpen(true)}>
+					重新連結素材
+				</Button>
+			</div>
+			<RelinkMediaDialog
+				isOpen={isDialogOpen}
+				onOpenChange={(open) => {
+					setIsDialogOpen(open);
+					if (!open) setCheckToken((token) => token + 1);
+				}}
+				projectId={projectId}
+				projectName={activeProject.metadata.name}
+				onRelinked={() => setCheckToken((token) => token + 1)}
+			/>
+		</>
 	);
 }
 

@@ -24,6 +24,12 @@ import {
 import type { Bookmark, SceneTracks, TScene } from "@/timeline";
 import { roundMediaTime } from "@/wasm";
 import {
+	IMPORTED_SUFFIX,
+	planProjectIdRepair,
+	stripImportedSuffix,
+} from "./project-repair";
+import { matchRelinkFiles } from "./relink";
+import {
 	SNAPSHOT_INTERVAL_MS,
 	type SnapshotInfo,
 	shouldTakeSnapshot,
@@ -40,6 +46,14 @@ interface ProjectSnapshotRecord {
 }
 
 export type ProjectSnapshotSummary = SnapshotInfo;
+
+interface BundleMediaEntry {
+	metadata: MediaAssetData;
+	size: number;
+	mime: string;
+	/** false:備份裡沒有這個檔案,匯入後要重新連結(第 1 版的備份沒有這個欄位,視為 true) */
+	included?: boolean;
+}
 
 /** 比較內容時忽略修改時間、縮圖、時間軸捲動位置這類不算「內容」的欄位 */
 function snapshotContent({ project }: { project: SerializedProject }): string {
@@ -125,10 +139,67 @@ class StorageService {
 			return;
 		}
 
-		this.migrationsPromise = runStorageMigrations({ migrations }).then(
-			() => undefined,
-		);
+		this.migrationsPromise = runStorageMigrations({ migrations })
+			.then(() => this.repairMismatchedProjectIds())
+			.catch((error) => {
+				console.error("[storage] 修復專案紀錄失敗", error);
+			})
+			.then(() => undefined);
 		await this.migrationsPromise;
+	}
+
+	/** 見 project-repair.ts:修復舊版匯入留下的「key 與 metadata.id 不一致」紀錄 */
+	private async repairMismatchedProjectIds(): Promise<void> {
+		const records = (await this.projectsAdapter.getAll()) as Array<
+			SerializedProject & { id?: string }
+		>;
+		const existingKeys = new Set(
+			records.map((record) => record.id).filter((id): id is string => !!id),
+		);
+		for (const record of records) {
+			const recordKey = record.id;
+			const metadataId = record.metadata?.id;
+			if (!recordKey || !metadataId || recordKey === metadataId) continue;
+
+			const { mediaMetadataAdapter } = this.getProjectMediaAdapters({
+				projectId: recordKey,
+			});
+			const originalHasMedia = (await mediaMetadataAdapter.list()).length > 0;
+			const plan = planProjectIdRepair({
+				recordKey,
+				metadataId,
+				existingKeys,
+				originalHasMedia,
+			});
+			if (!plan) continue;
+
+			const { id: _id, ...content } = record;
+			if (plan.copyToId) {
+				await this.projectsAdapter.set({ key: plan.copyToId, value: content });
+				existingKeys.add(plan.copyToId);
+			}
+			if (plan.original === "restore") {
+				await this.projectsAdapter.set({
+					key: recordKey,
+					value: {
+						...content,
+						metadata: {
+							...content.metadata,
+							id: recordKey,
+							name: stripImportedSuffix({ name: content.metadata.name }),
+						},
+					},
+				});
+			} else {
+				await this.projectsAdapter.remove(recordKey);
+				existingKeys.delete(recordKey);
+			}
+			console.info("[storage] 已修復匯入造成的專案紀錄錯誤", {
+				recordKey,
+				metadataId,
+				plan,
+			});
+		}
 	}
 
 	private getProjectMediaAdapters({ projectId }: { projectId: string }) {
@@ -805,33 +876,49 @@ class StorageService {
 	/**
 	 * 備份檔格式:[8 bytes 標頭長度][JSON 標頭][素材檔案 1][素材檔案 2]...
 	 * 以 Blob 串接,檔案內容不會被整個讀進記憶體。
+	 *
+	 * includeMedia = false 時只存專案(時間軸與素材清單),檔案很小;
+	 * 匯入後由使用者重新選取原始素材,依檔名與大小對回去(relinkMedia)。
 	 */
-	async exportProjectBundle({ id }: { id: string }): Promise<Blob> {
+	async exportProjectBundle({
+		id,
+		includeMedia = true,
+	}: {
+		id: string;
+		includeMedia?: boolean;
+	}): Promise<Blob> {
 		await this.ensureMigrations();
-		const project = await this.projectsAdapter.get(id);
-		if (!project) throw new Error("找不到專案");
+		const stored = (await this.projectsAdapter.get(id)) as
+			| (SerializedProject & { id?: string })
+			| null;
+		if (!stored) throw new Error("找不到專案");
+		const { id: _storedId, ...project } = stored;
 
 		const { mediaMetadataAdapter, mediaAssetsAdapter } =
 			this.getProjectMediaAdapters({ projectId: id });
 		const mediaIds = await mediaMetadataAdapter.list();
 
-		const media: Array<{ metadata: MediaAssetData; size: number; mime: string }> = [];
+		const media: BundleMediaEntry[] = [];
 		const parts: BlobPart[] = [];
 		for (const mediaId of mediaIds) {
-			const [file, metadata] = await Promise.all([
-				mediaAssetsAdapter.get(mediaId),
-				mediaMetadataAdapter.get(mediaId),
-			]);
-			if (!file || !metadata) continue;
-			media.push({ metadata, size: file.size, mime: file.type });
-			parts.push(file);
+			const metadata = await mediaMetadataAdapter.get(mediaId);
+			if (!metadata) continue;
+			const file = includeMedia ? await mediaAssetsAdapter.get(mediaId) : null;
+			if (file) {
+				media.push({ metadata, size: file.size, mime: file.type, included: true });
+				parts.push(file);
+			} else {
+				// 只存專案,或素材檔本來就不見了:留下清單,匯入後可以重新連結
+				media.push({ metadata, size: 0, mime: "", included: false });
+			}
 		}
 
 		const header = new TextEncoder().encode(
 			JSON.stringify({
 				format: "opencut-slim-backup",
-				version: 1,
+				version: 2,
 				exportedAt: new Date().toISOString(),
+				includesMedia: includeMedia,
 				project,
 				media,
 			}),
@@ -843,21 +930,32 @@ class StorageService {
 		});
 	}
 
-	/** 匯入備份檔,一律建立為新專案(不會覆蓋現有專案),回傳新專案 ID */
-	async importProjectBundle({ file }: { file: Blob }): Promise<string> {
+	/**
+	 * 匯入備份檔,一律建立為新專案(不會覆蓋現有專案)。
+	 * 回傳新專案 ID 與需要重新連結的素材數量(只存專案的備份,或備份時素材已遺失)。
+	 */
+	async importProjectBundle({
+		file,
+	}: {
+		file: Blob;
+	}): Promise<{ id: string; missingCount: number }> {
 		await this.ensureMigrations();
+		if (file.size < 8) throw new Error("這不是有效的備份檔");
 		const lengthView = new DataView(await file.slice(0, 8).arrayBuffer());
 		const headerLength = Number(lengthView.getBigUint64(0));
 		if (!Number.isFinite(headerLength) || headerLength <= 0 || headerLength > file.size) {
 			throw new Error("這不是有效的備份檔");
 		}
-		const header = JSON.parse(
-			await file.slice(8, 8 + headerLength).text(),
-		) as {
+		let header: {
 			format?: string;
-			project?: SerializedProject;
-			media?: Array<{ metadata: MediaAssetData; size: number; mime: string }>;
+			project?: SerializedProject & { id?: string };
+			media?: BundleMediaEntry[];
 		};
+		try {
+			header = JSON.parse(await file.slice(8, 8 + headerLength).text());
+		} catch {
+			throw new Error("這不是有效的備份檔");
+		}
 		if (header.format !== "opencut-slim-backup" || !header.project || !header.media) {
 			throw new Error("這不是有效的備份檔");
 		}
@@ -866,31 +964,43 @@ class StorageService {
 		const { mediaMetadataAdapter, mediaAssetsAdapter } =
 			this.getProjectMediaAdapters({ projectId: newId });
 
+		let missingCount = 0;
 		try {
 			let offset = 8 + headerLength;
 			for (const item of header.media) {
-				const slice = file.slice(offset, offset + item.size, item.mime);
-				offset += item.size;
-				const restored = new File([slice], item.metadata.name, {
-					type: item.mime,
-					lastModified: item.metadata.lastModified,
-				});
-				await mediaAssetsAdapter.set({ key: item.metadata.id, value: restored });
+				// 第 1 版沒有 included 欄位,一律含素材
+				const included = item.included !== false;
+				if (included) {
+					const slice = file.slice(offset, offset + item.size, item.mime);
+					offset += item.size;
+					if (slice.size !== item.size) {
+						throw new Error("備份檔不完整(檔案可能被截斷)");
+					}
+					const restored = new File([slice], item.metadata.name, {
+						type: item.mime,
+						lastModified: item.metadata.lastModified,
+					});
+					await mediaAssetsAdapter.set({ key: item.metadata.id, value: restored });
+				} else {
+					missingCount += 1;
+				}
 				await mediaMetadataAdapter.set({
 					key: item.metadata.id,
 					value: item.metadata,
 				});
 			}
 
+			// 備份裡的紀錄帶著原專案的 id,一定要拿掉,否則會寫到原專案上(舊版的 bug)
+			const { id: _oldId, ...project } = header.project;
 			const now = new Date().toISOString();
 			await this.projectsAdapter.set({
 				key: newId,
 				value: {
-					...header.project,
+					...project,
 					metadata: {
-						...header.project.metadata,
+						...project.metadata,
 						id: newId,
-						name: `${header.project.metadata.name} (匯入)`,
+						name: `${stripImportedSuffix({ name: project.metadata.name })}${IMPORTED_SUFFIX}`,
 						updatedAt: now,
 					},
 				},
@@ -905,7 +1015,69 @@ class StorageService {
 			}
 			throw error;
 		}
-		return newId;
+
+		// 匯入的可能是舊版格式:馬上跑一次遷移
+		this.migrationsPromise = null;
+		await this.ensureMigrations();
+		return { id: newId, missingCount };
+	}
+
+	/** 有素材清單、但瀏覽器裡沒有檔案的素材(需要重新連結) */
+	async listMissingMedia({
+		projectId,
+	}: {
+		projectId: string;
+	}): Promise<MediaAssetData[]> {
+		const { mediaMetadataAdapter, mediaAssetsAdapter } =
+			this.getProjectMediaAdapters({ projectId });
+		const missing: MediaAssetData[] = [];
+		for (const id of await mediaMetadataAdapter.list()) {
+			const metadata = await mediaMetadataAdapter.get(id);
+			if (!metadata) continue;
+			const file = await mediaAssetsAdapter.get(id).catch(() => null);
+			if (!file) missing.push(metadata);
+		}
+		return missing;
+	}
+
+	/**
+	 * 用使用者選的檔案補回缺少的素材:先比檔名 + 大小,再退一步只比檔名(同名只有一個時)。
+	 * 回傳成功連結的數量與還缺的素材。
+	 */
+	async relinkMedia({
+		projectId,
+		files,
+	}: {
+		projectId: string;
+		files: File[];
+	}): Promise<{ linked: number; remaining: MediaAssetData[] }> {
+		const missing = await this.listMissingMedia({ projectId });
+		const matches = matchRelinkFiles({ missing, files });
+		const { mediaMetadataAdapter, mediaAssetsAdapter } =
+			this.getProjectMediaAdapters({ projectId });
+
+		let linked = 0;
+		for (const { metadata, file } of matches) {
+			try {
+				await mediaAssetsAdapter.set({ key: metadata.id, value: file });
+				await mediaMetadataAdapter.set({
+					key: metadata.id,
+					value: {
+						...metadata,
+						size: file.size,
+						lastModified: file.lastModified,
+					},
+				});
+				linked += 1;
+			} catch (error) {
+				await mediaAssetsAdapter.remove(metadata.id).catch(() => {});
+				if (this.isQuotaExceededError({ error })) {
+					throw new Error("瀏覽器儲存空間不足,無法加入素材");
+				}
+				throw error;
+			}
+		}
+		return { linked, remaining: await this.listMissingMedia({ projectId }) };
 	}
 
 	/** 專案內所有素材的總大小(bytes),以及素材數量 */

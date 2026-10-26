@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "@/hooks/use-router";
 import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { EditorCore } from "@/core";
 import { useEditor } from "@/editor/use-editor";
 import { useKeybindingsListener } from "@/actions/use-keybindings";
@@ -25,6 +26,7 @@ export function EditorProvider({ projectId, children }: EditorProviderProps) {
 	const router = useRouter();
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [notFound, setNotFound] = useState(false);
 	const { setLoadingProject } = useKeybindingsStore();
 
 	useEffect(() => {
@@ -38,6 +40,7 @@ export function EditorProvider({ projectId, children }: EditorProviderProps) {
 		const loadProject = async () => {
 			try {
 				setIsLoading(true);
+				setNotFound(false);
 				await initializeGpuRenderer();
 				editor.renderer.setDegraded(!isGpuAvailable());
 				await editor.project.loadProject({ id: projectId });
@@ -55,15 +58,10 @@ export function EditorProvider({ projectId, children }: EditorProviderProps) {
 						err.message.includes("does not exist"));
 
 				if (isNotFound) {
-					try {
-						const newProjectId = await editor.project.createNewProject({
-							name: "未命名專案",
-						});
-						router.replace(`/editor/${newProjectId}`);
-					} catch (_createErr) {
-						setError("Failed to create project");
-						setIsLoading(false);
-					}
+					// 不再自動建立新專案:舊網址、書籤或匯入失敗的專案都會走到這裡,
+					// 以前每次都會默默多出一個「未命名專案」
+					setNotFound(true);
+					setIsLoading(false);
 				} else {
 					const wasmPanic = (window as Window & { __wasmPanic?: string })
 						.__wasmPanic;
@@ -87,6 +85,35 @@ export function EditorProvider({ projectId, children }: EditorProviderProps) {
 		};
 	}, [projectId, router]);
 
+	if (notFound) {
+		return (
+			<div className="bg-background flex h-screen w-screen items-center justify-center">
+				<div className="flex max-w-sm flex-col items-center gap-4 text-center">
+					<p className="text-sm font-medium">找不到這個專案</p>
+					<p className="text-muted-foreground text-sm">
+						它可能已經被刪除,或是存在別的瀏覽器裡(專案只存在當初建立它的瀏覽器)。
+					</p>
+					<div className="flex gap-2">
+						<Button variant="outline" onClick={() => router.push("/projects")}>
+							回到專案列表
+						</Button>
+						<Button
+							onClick={async () => {
+								const newProjectId = await EditorCore.getInstance().project.createNewProject({
+									name: "未命名專案",
+								});
+								setNotFound(false);
+								router.replace(`/editor/${newProjectId}`);
+							}}
+						>
+							建立新專案
+						</Button>
+					</div>
+				</div>
+			</div>
+		);
+	}
+
 	if (error) {
 		return (
 			<div className="bg-background flex h-screen w-screen items-center justify-center">
@@ -102,7 +129,7 @@ export function EditorProvider({ projectId, children }: EditorProviderProps) {
 			<div className="bg-background flex h-screen w-screen items-center justify-center">
 				<div className="flex flex-col items-center gap-4">
 					<Loader2 className="text-muted-foreground size-8 animate-spin" />
-					<p className="text-muted-foreground text-sm">Loading project...</p>
+					<p className="text-muted-foreground text-sm">載入專案中…</p>
 				</div>
 			</div>
 		);
@@ -113,7 +140,7 @@ export function EditorProvider({ projectId, children }: EditorProviderProps) {
 			<div className="bg-background flex h-screen w-screen items-center justify-center">
 				<div className="flex flex-col items-center gap-4">
 					<Loader2 className="text-muted-foreground size-8 animate-spin" />
-					<p className="text-muted-foreground text-sm">Exiting project...</p>
+					<p className="text-muted-foreground text-sm">離開專案中…</p>
 				</div>
 			</div>
 		);

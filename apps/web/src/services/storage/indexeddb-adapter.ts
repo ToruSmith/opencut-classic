@@ -59,7 +59,9 @@ export class IndexedDBAdapter<T> implements StorageAdapter<T> {
 		const store = transaction.objectStore(this.storeName);
 
 		return new Promise((resolve, reject) => {
-			const request = store.put({ id: key, ...value });
+			// key 一定要放在最後:value 裡如果帶著舊的 id(例如從備份讀出來的紀錄),
+			// 不能蓋掉呼叫端指定的 key,否則會寫到別的紀錄上
+			const request = store.put({ ...value, id: key });
 			request.onerror = () => reject(request.error);
 			request.onsuccess = () => resolve();
 		});

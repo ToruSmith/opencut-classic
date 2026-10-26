@@ -84,6 +84,19 @@
 - **LUT 尚未支援**:效果管線每個 pass 只綁一張輸入貼圖與 8 個浮點數的 uniform,要支援 .cube 需要在 `pipeline.rs` 加第二個貼圖綁定、
   在 bridge 傳 LUT 資料、並把 LUT 檔存進專案。
 
+## 專案儲存、備份與重新連結(2026-10)
+
+- **`IndexedDBAdapter.set` 一定是 key 優先**(`{ ...value, id: key }`)。舊版是 `{ id: key, ...value }`,
+  匯入備份時備份裡的舊 `id` 蓋掉新 key,把匯入的專案寫到原專案上。`ensureMigrations` 之後會跑
+  `repairMismatchedProjectIds`(規則在 `services/storage/project-repair.ts`)修復已經壞掉的紀錄。
+- 從資料庫讀出的紀錄帶著 `id` 欄位,另存時一律先拿掉(`const { id: _id, ...rest } = record`)。
+- **備份格式第 2 版**:`media[].included`;`false` 表示「只存專案」,匯入後素材只有 metadata、沒有 OPFS 檔案。
+  `listMissingMedia` 找出這些素材,`relinkMedia` 依檔名 + 大小(其次唯一同名)對回去(`services/storage/relink.ts`)。
+  第 1 版備份沒有 `included`,視為全部含素材。
+- **找不到專案不再自動建立新專案**(以前每次都會多一個「未命名專案」),改顯示提示頁。
+- **空白專案不保留**:離開編輯器(選單或瀏覽器上一頁)時,沒有任何片段、也沒有素材的專案會被刪掉(`project.discardIfEmpty`)。
+  專案列表的「清除空白專案」用同一個判斷。
+
 ## 新增效果 / 轉場
 
 - **效果(像素處理)**:

@@ -26,6 +26,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ShortcutsDialog } from "@/actions/components/shortcuts-dialog";
+import { ExportBackupDialog } from "@/project/components/export-backup-dialog";
 import Image from "@/components/ui/app-image";
 import { cn } from "@/utils/ui";
 
@@ -73,7 +74,7 @@ export function EditorHeader() {
 
 function ProjectDropdown() {
 	const [openDialog, setOpenDialog] = useState<
-		"delete" | "rename" | "shortcuts" | null
+		"delete" | "rename" | "shortcuts" | "backup" | null
 	>(null);
 	const [isExiting, setIsExiting] = useState(false);
 	const router = useRouter();
@@ -86,6 +87,13 @@ function ProjectDropdown() {
 
 		try {
 			await editor.project.prepareExit();
+			const id = editor.project.getActiveOrNull()?.metadata.id;
+			if (id) {
+				await editor.save.flush();
+				if (await editor.project.discardIfEmpty({ id })) {
+					toast("空白專案沒有保留");
+				}
+			}
 			editor.project.closeProject();
 		} catch (error) {
 			console.error("Failed to prepare project exit:", error);
@@ -166,26 +174,33 @@ function ProjectDropdown() {
 					</DropdownMenuItem>
 
 					<DropdownMenuItem
-						onClick={async () => {
-							if (!activeProject) return;
-							try {
-								await editor.project.exportBackup({
-									id: activeProject.metadata.id,
-									name: activeProject.metadata.name,
-								});
-							} catch (error) {
-								toast.error("匯出備份失敗", {
-									description:
-										error instanceof Error ? error.message : undefined,
-								});
-							}
-						}}
+						onClick={() => setOpenDialog("backup")}
 						icon={<HugeiconsIcon icon={Download01Icon} />}
 					>
 						匯出備份
 					</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>
+			<ExportBackupDialog
+				isOpen={openDialog === "backup"}
+				onOpenChange={(isOpen) => setOpenDialog(isOpen ? "backup" : null)}
+				projectNames={[activeProject?.metadata.name || ""]}
+				onConfirm={async ({ includeMedia }) => {
+					if (!activeProject) return;
+					try {
+						const saved = await editor.project.exportBackup({
+							id: activeProject.metadata.id,
+							name: activeProject.metadata.name,
+							includeMedia,
+						});
+						if (saved) toast.success("備份已匯出");
+					} catch (error) {
+						toast.error("匯出備份失敗", {
+							description: error instanceof Error ? error.message : undefined,
+						});
+					}
+				}}
+			/>
 			<RenameProjectDialog
 				isOpen={openDialog === "rename"}
 				onOpenChange={(isOpen) => setOpenDialog(isOpen ? "rename" : null)}

@@ -291,13 +291,27 @@ export class ProjectManager {
 		this.notify();
 	}
 
-	/** 匯出專案備份檔(含專案內容與所有素材);使用者取消時回傳 false */
-	async exportBackup({ id, name }: { id: string; name: string }): Promise<boolean> {
+	/**
+	 * 匯出專案備份檔;使用者取消時回傳 false。
+	 * includeMedia = false 只存專案(小檔案),匯入時再重新選取原始素材。
+	 */
+	async exportBackup({
+		id,
+		name,
+		includeMedia = true,
+	}: {
+		id: string;
+		name: string;
+		includeMedia?: boolean;
+	}): Promise<boolean> {
 		if (this.active?.metadata.id === id) {
+			await this.editor.save.flush();
 			await this.saveCurrentProject();
 		}
-		const blob = await storageService.exportProjectBundle({ id });
-		const filename = `${name}.opencut-backup`;
+		const blob = await storageService.exportProjectBundle({ id, includeMedia });
+		const filename = includeMedia
+			? `${name}.opencut-backup`
+			: `${name}(專案檔).opencut-backup`;
 		const picker = (
 			window as unknown as {
 				showSaveFilePicker?: (options: unknown) => Promise<FileSystemFileHandle>;
@@ -331,12 +345,70 @@ export class ProjectManager {
 		return true;
 	}
 
-	/** 從備份檔建立新專案,回傳新專案 ID */
-	async importBackup({ file }: { file: File }): Promise<string> {
-		const id = await storageService.importProjectBundle({ file });
+	/** 從備份檔建立新專案,回傳新專案 ID 與需要重新連結的素材數量 */
+	async importBackup({
+		file,
+	}: {
+		file: File;
+	}): Promise<{ id: string; missingCount: number }> {
+		const result = await storageService.importProjectBundle({ file });
 		this.savedProjects = await storageService.loadAllProjectsMetadata();
 		this.notify();
-		return id;
+		return result;
+	}
+
+	/** 專案裡缺少檔案的素材(只存專案的備份匯入後,或素材檔遺失) */
+	async listMissingMedia({ id }: { id: string }) {
+		return storageService.listMissingMedia({ projectId: id });
+	}
+
+	/** 用使用者選的檔案補回缺少的素材;專案正開著的話重新載入素材 */
+	async relinkMedia({ id, files }: { id: string; files: File[] }) {
+		const result = await storageService.relinkMedia({ projectId: id, files });
+		if (result.linked > 0 && this.active?.metadata.id === id) {
+			await this.editor.media.loadProjectMedia({ projectId: id });
+		}
+		return result;
+	}
+
+	/**
+	 * 離開編輯器時呼叫:完全空白(沒有任何片段、也沒有素材)的專案不保留,
+	 * 避免「點了新專案又離開」在首頁留下一堆空專案。回傳是否刪掉了。
+	 */
+	async discardIfEmpty({ id }: { id: string }): Promise<boolean> {
+		try {
+			const isActive = this.active?.metadata.id === id;
+			// 開著的專案看記憶體裡的狀態(可能還有沒存檔的變更),其他看資料庫
+			const scenes = isActive
+				? this.editor.scenes.getScenes()
+				: ((await storageService.loadProject({ id }))?.project.scenes ?? null);
+			if (!scenes) return false;
+			const hasElements = scenes.some((scene) =>
+				[...scene.tracks.overlay, scene.tracks.main, ...scene.tracks.audio].some(
+					(track) => track.elements.length > 0,
+				),
+			);
+			if (hasElements) return false;
+			if (isActive && this.editor.media.getAssets().length > 0) return false;
+			const usage = await storageService.getProjectMediaUsage({ projectId: id });
+			if (usage.count > 0) return false;
+			if (this.active?.metadata.id === id) this.closeProject();
+			await this.deleteProjects({ ids: [id] });
+			return true;
+		} catch (error) {
+			console.warn("檢查空白專案失敗", error);
+			return false;
+		}
+	}
+
+	/** 專案列表用:刪掉所有完全空白的專案,回傳刪掉幾個 */
+	async cleanupEmptyProjects(): Promise<number> {
+		let removed = 0;
+		for (const project of [...this.savedProjects]) {
+			if (project.id === this.active?.metadata.id) continue;
+			if (await this.discardIfEmpty({ id: project.id })) removed += 1;
+		}
+		return removed;
 	}
 
 	cancelExport(): void {

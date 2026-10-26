@@ -49,6 +49,7 @@ import {
 	InformationCircleIcon,
 	RotateClockwiseIcon,
 	Alert02Icon,
+	Link02Icon,
 } from "@hugeicons/core-free-icons";
 import { OcVideoIcon } from "@/components/icons";
 import { Label } from "@/components/ui/label";
@@ -70,6 +71,8 @@ import { DeleteProjectDialog } from "@/project/components/delete-project-dialog"
 import { ProjectInfoDialog } from "@/project/components/project-info-dialog";
 import { RenameProjectDialog } from "@/project/components/rename-project-dialog";
 import { ProjectSnapshotsDialog } from "@/project/components/project-snapshots-dialog";
+import { ExportBackupDialog } from "@/project/components/export-backup-dialog";
+import { RelinkMediaDialog } from "@/project/components/relink-media-dialog";
 import { needsBackupReminder } from "@/services/storage/snapshot-policy";
 import { cn } from "@/utils/ui";
 const formatProjectDuration = ({
@@ -107,6 +110,27 @@ export default function ProjectsPage() {
 			editor.project.loadAllProjects();
 		}
 	}, [editor.project]);
+
+	// 從編輯器用瀏覽器「上一頁」回來時,專案還掛在記憶體裡:
+	// 先把變更存完,完全空白的專案不保留,其他的關閉(下次打開會重新從資料庫載入)
+	useEffect(() => {
+		const active = editor.project.getActiveOrNull();
+		if (!active) return;
+		const id = active.metadata.id;
+		void (async () => {
+			try {
+				await editor.save.flush();
+			} catch (error) {
+				console.warn("存檔失敗", error);
+			}
+			const removed = await editor.project.discardIfEmpty({ id });
+			if (removed) {
+				toast("空白專案沒有保留");
+			} else if (editor.project.getActiveOrNull()?.metadata.id === id) {
+				editor.project.closeProject();
+			}
+		})();
+	}, [editor]);
 
 	return (
 		<div className="bg-background min-h-screen">
@@ -189,6 +213,7 @@ function ProjectsHeader() {
 				<div className="flex items-center gap-3 md:gap-4">
 					<SearchBar className="hidden md:block" />
 					<StorageButton />
+					<CleanupEmptyProjectsButton />
 					<ImportBackupButton />
 					<NewProjectButton />
 				</div>
@@ -427,12 +452,18 @@ function ProjectActions() {
 		setIsDeleteDialogOpen(false);
 	};
 
-	const handleBackup = async () => {
+	const [isBackupDialogOpen, setIsBackupDialogOpen] = useState(false);
+	const handleBackup = () => setIsBackupDialogOpen(true);
+	const runBackup = async ({ includeMedia }: { includeMedia: boolean }) => {
 		for (const project of savedProjects.filter((p) =>
 			selectedProjectIds.includes(p.id),
 		)) {
 			try {
-				await editor.project.exportBackup({ id: project.id, name: project.name });
+				await editor.project.exportBackup({
+					id: project.id,
+					name: project.name,
+					includeMedia,
+				});
 			} catch (error) {
 				toast.error("匯出備份失敗", {
 					description: error instanceof Error ? error.message : undefined,
@@ -490,6 +521,13 @@ function ProjectActions() {
 				onOpenChange={setIsDeleteDialogOpen}
 				projectNames={selectedProjectNames}
 				onConfirm={handleDeleteConfirm}
+			/>
+
+			<ExportBackupDialog
+				isOpen={isBackupDialogOpen}
+				onOpenChange={setIsBackupDialogOpen}
+				projectNames={selectedProjectNames}
+				onConfirm={(options) => void runBackup(options)}
 			/>
 		</>
 	);
@@ -551,13 +589,29 @@ function StorageButton() {
 function ImportBackupButton() {
 	const editor = useEditor();
 	const inputRef = useRef<HTMLInputElement>(null);
+	const [relinkTarget, setRelinkTarget] = useState<{
+		id: string;
+		name: string;
+	} | null>(null);
 
 	const handleFile = async (file: File | undefined) => {
 		if (!file) return;
 		const toastId = toast.loading("匯入備份中…");
 		try {
-			await editor.project.importBackup({ file });
-			toast.success("備份已匯入為新專案", { id: toastId });
+			const { id, missingCount } = await editor.project.importBackup({ file });
+			toast.success("備份已匯入為新專案", {
+				id: toastId,
+				description:
+					missingCount > 0
+						? `有 ${missingCount} 個素材不在備份裡,請選取原始檔案`
+						: undefined,
+			});
+			if (missingCount > 0) {
+				const name =
+					editor.project.getSavedProjects().find((project) => project.id === id)
+						?.name ?? "匯入的專案";
+				setRelinkTarget({ id, name });
+			}
 		} catch (error) {
 			toast.error("匯入失敗", {
 				id: toastId,
@@ -586,7 +640,55 @@ function ImportBackupButton() {
 			>
 				<span className="text-sm font-medium">匯入備份</span>
 			</Button>
+			{relinkTarget && (
+				<RelinkMediaDialog
+					isOpen
+					onOpenChange={(open) => {
+						if (!open) setRelinkTarget(null);
+					}}
+					projectId={relinkTarget.id}
+					projectName={relinkTarget.name}
+				/>
+			)}
 		</>
+	);
+}
+
+function CleanupEmptyProjectsButton() {
+	const editor = useEditor();
+	const savedProjects = useEditor((e) => e.project.getSavedProjects());
+	const [isCleaning, setIsCleaning] = useState(false);
+	// 長度 0 的才可能是空白專案(真正刪除前還會確認沒有任何片段與素材)
+	const candidateCount = savedProjects.filter(
+		(project) => !(project.duration > 0),
+	).length;
+	if (candidateCount === 0) return null;
+
+	return (
+		<Button
+			size="lg"
+			variant="outline"
+			className="flex px-5 md:px-6"
+			disabled={isCleaning}
+			title="刪除沒有任何片段、也沒有素材的專案"
+			onClick={async () => {
+				setIsCleaning(true);
+				try {
+					const removed = await editor.project.cleanupEmptyProjects();
+					if (removed > 0) {
+						toast.success(`已清除 ${removed} 個空白專案`);
+					} else {
+						toast("沒有可清除的空白專案", {
+							description: "長度為 0 的專案裡還有素材,所以保留。",
+						});
+					}
+				} finally {
+					setIsCleaning(false);
+				}
+			}}
+		>
+			<span className="text-sm font-medium">清除空白專案</span>
+		</Button>
 	);
 }
 
@@ -596,7 +698,7 @@ function NewProjectButton() {
 
 	const handleCreateProject = async () => {
 		const projectId = await editor.project.createNewProject({
-			name: "New project",
+			name: "未命名專案",
 		});
 		router.push(`/editor/${projectId}`);
 	};
@@ -608,7 +710,7 @@ function NewProjectButton() {
 			onClick={handleCreateProject}
 		>
 			<span className="text-sm font-medium hidden md:block">新專案</span>
-			<span className="text-sm font-medium block md:hidden">New</span>
+			<span className="text-sm font-medium block md:hidden">新增</span>
 		</Button>
 	);
 }
@@ -655,11 +757,16 @@ function ProjectItem({
 	const handleDeleteClick = () => setIsDeleteDialogOpen(true);
 	const handleInfoClick = () => setIsInfoDialogOpen(true);
 	const handleSnapshotsClick = () => setIsSnapshotsDialogOpen(true);
-	const handleBackupClick = async () => {
+	const [isBackupDialogOpen, setIsBackupDialogOpen] = useState(false);
+	const [isRelinkDialogOpen, setIsRelinkDialogOpen] = useState(false);
+	const handleBackupClick = () => setIsBackupDialogOpen(true);
+	const handleRelinkClick = () => setIsRelinkDialogOpen(true);
+	const runBackup = async ({ includeMedia }: { includeMedia: boolean }) => {
 		try {
 			const saved = await editor.project.exportBackup({
 				id: project.id,
 				name: project.name,
+				includeMedia,
 			});
 			if (saved) {
 				toast.success("備份已匯出");
@@ -799,6 +906,7 @@ function ProjectItem({
 					onInfoClick={handleInfoClick}
 					onSnapshotsClick={handleSnapshotsClick}
 					onBackupClick={handleBackupClick}
+					onRelinkClick={handleRelinkClick}
 				/>
 			)}
 		</div>
@@ -842,6 +950,7 @@ function ProjectItem({
 										onInfoClick={handleInfoClick}
 										onSnapshotsClick={handleSnapshotsClick}
 										onBackupClick={handleBackupClick}
+										onRelinkClick={handleRelinkClick}
 									/>
 								)}
 							</>
@@ -857,6 +966,7 @@ function ProjectItem({
 					onInfoClick={handleInfoClick}
 					onSnapshotsClick={handleSnapshotsClick}
 					onBackupClick={handleBackupClick}
+					onRelinkClick={handleRelinkClick}
 				/>
 			</ContextMenu>
 
@@ -881,6 +991,20 @@ function ProjectItem({
 				isOpen={isInfoDialogOpen}
 				onOpenChange={setIsInfoDialogOpen}
 				project={project}
+			/>
+
+			<ExportBackupDialog
+				isOpen={isBackupDialogOpen}
+				onOpenChange={setIsBackupDialogOpen}
+				projectNames={[project.name]}
+				onConfirm={(options) => void runBackup(options)}
+			/>
+
+			<RelinkMediaDialog
+				isOpen={isRelinkDialogOpen}
+				onOpenChange={setIsRelinkDialogOpen}
+				projectId={project.id}
+				projectName={project.name}
 			/>
 
 			<ProjectSnapshotsDialog
@@ -916,6 +1040,7 @@ function ProjectContextMenuContent({
 	onInfoClick,
 	onSnapshotsClick,
 	onBackupClick,
+	onRelinkClick,
 }: {
 	onRenameClick: () => void;
 	onDuplicateClick: () => void;
@@ -923,6 +1048,7 @@ function ProjectContextMenuContent({
 	onInfoClick: () => void;
 	onSnapshotsClick: () => void;
 	onBackupClick: () => void;
+	onRelinkClick: () => void;
 }) {
 	return (
 		<ContextMenuContent>
@@ -949,6 +1075,12 @@ function ProjectContextMenuContent({
 				onClick={onSnapshotsClick}
 			>
 				版本紀錄
+			</ContextMenuItem>
+			<ContextMenuItem
+				icon={<HugeiconsIcon icon={Link02Icon} />}
+				onClick={onRelinkClick}
+			>
+				重新連結素材
 			</ContextMenuItem>
 			<ContextMenuItem
 				icon={<HugeiconsIcon icon={InformationCircleIcon} />}
@@ -978,6 +1110,7 @@ function ProjectMenu({
 	onInfoClick,
 	onSnapshotsClick,
 	onBackupClick,
+	onRelinkClick,
 }: {
 	isOpen: boolean;
 	onOpenChange: (open: boolean) => void;
@@ -988,6 +1121,7 @@ function ProjectMenu({
 	onInfoClick: () => void;
 	onSnapshotsClick: () => void;
 	onBackupClick: () => void;
+	onRelinkClick: () => void;
 }) {
 	const handleMenuClick = ({
 		event,
@@ -1040,6 +1174,11 @@ function ProjectMenu({
 		onOpenChange(false);
 	};
 
+	const handleRelinkClick = () => {
+		onRelinkClick();
+		onOpenChange(false);
+	};
+
 	const isGrid = variant === "grid";
 
 	return (
@@ -1089,6 +1228,10 @@ function ProjectMenu({
 				<DropdownMenuItem onClick={handleSnapshotsClick}>
 					<HugeiconsIcon icon={RotateClockwiseIcon} />
 					版本紀錄
+				</DropdownMenuItem>
+				<DropdownMenuItem onClick={handleRelinkClick}>
+					<HugeiconsIcon icon={Link02Icon} />
+					重新連結素材
 				</DropdownMenuItem>
 				<DropdownMenuItem onClick={handleInfoClick}>
 					<HugeiconsIcon icon={InformationCircleIcon} />
@@ -1143,7 +1286,7 @@ function EmptyState() {
 	const handleCreateProject = async () => {
 		try {
 			const projectId = await editor.project.createNewProject({
-				name: "New project",
+				name: "未命名專案",
 			});
 			router.push(`/editor/${projectId}`);
 		} catch (error) {
