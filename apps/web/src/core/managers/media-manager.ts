@@ -183,6 +183,8 @@ export class MediaManager {
 
 		let lastNotified = 0;
 		try {
+			// 先清掉舊的代理檔與完成標記,轉到一半失敗時才不會誤用舊檔
+			await storageService.deleteMediaProxy({ projectId, id }).catch(() => {});
 			const writable = await storageService
 				.openMediaProxyWritable({ projectId, id })
 				.catch(() => null);
@@ -207,8 +209,12 @@ export class MediaManager {
 				});
 			}
 
-			const proxyFile = await storageService.loadMediaProxy({ projectId, id });
-			if (!proxyFile || proxyFile.size === 0) {
+			await storageService.markMediaProxyComplete({ projectId, id });
+			const proxyFile = await storageService.loadCompletedMediaProxy({
+				projectId,
+				id,
+			});
+			if (!proxyFile) {
 				throw new Error("代理檔寫入失敗");
 			}
 			// 轉檔期間專案可能已關閉或素材已刪除:只有素材還在時才掛上去

@@ -24,6 +24,7 @@ import {
 import type { Bookmark, SceneTracks, TScene } from "@/timeline";
 import { roundMediaTime } from "@/wasm";
 import {
+	SNAPSHOT_INTERVAL_MS,
 	type SnapshotInfo,
 	shouldTakeSnapshot,
 	snapshotId,
@@ -355,10 +356,6 @@ class StorageService {
 		projectId: string;
 		force?: boolean;
 	}): Promise<void> {
-		const project = await this.projectsAdapter.get(projectId);
-		if (!project || typeof project !== "object" || !project.metadata) return;
-		const content = snapshotContent({ project });
-
 		let latest = this.latestSnapshots.get(projectId) ?? null;
 		if (!latest) {
 			const [newest] = await this.listProjectSnapshots({ projectId });
@@ -366,11 +363,18 @@ class StorageService {
 				const record = await this.snapshotsAdapter.get(newest.id);
 				if (record) {
 					latest = { createdAt: newest.createdAt, content: record.content };
+					this.latestSnapshots.set(projectId, latest);
 				}
 			}
 		}
 
 		const now = Date.now();
+		// 大部分存檔都還沒到間隔,先擋掉,不必讀專案、也不必序列化比對
+		if (!force && latest && now - latest.createdAt < SNAPSHOT_INTERVAL_MS) return;
+
+		const project = await this.projectsAdapter.get(projectId);
+		if (!project || typeof project !== "object" || !project.metadata) return;
+		const content = snapshotContent({ project });
 		const shouldTake = force
 			? latest?.content !== content
 			: shouldTakeSnapshot({
@@ -511,11 +515,10 @@ class StorageService {
 
 		if (!file || !metadata) return null;
 
+		// 只用「完整寫完」的代理檔:轉檔中途關掉分頁會留下不完整的檔案,沒有完成標記就不用
 		const proxyFile =
 			metadata.type === "video"
-				? await this.getProjectMediaAdapters({ projectId })
-						.mediaProxiesAdapter.get(id)
-						.catch(() => null)
+				? await this.loadCompletedMediaProxy({ projectId, id }).catch(() => null)
 				: null;
 
 		let url: string;
@@ -546,7 +549,7 @@ class StorageService {
 			duration: metadata.duration,
 			thumbnailUrl: metadata.thumbnailUrl,
 			ephemeral: metadata.ephemeral,
-			...(proxyFile && proxyFile.size > 0 ? { proxyFile } : {}),
+			...(proxyFile ? { proxyFile } : {}),
 		};
 	}
 
@@ -575,7 +578,22 @@ class StorageService {
 		await mediaProxiesAdapter.set({ key: id, value: file });
 	}
 
-	async loadMediaProxy({
+	/** 轉檔成功後呼叫:留下完成標記,之後載入專案才會使用這個代理檔 */
+	async markMediaProxyComplete({
+		projectId,
+		id,
+	}: {
+		projectId: string;
+		id: string;
+	}): Promise<void> {
+		const { mediaProxiesAdapter } = this.getProjectMediaAdapters({ projectId });
+		await mediaProxiesAdapter.set({
+			key: `${id}.done`,
+			value: new File([], `${id}.done`),
+		});
+	}
+
+	async loadCompletedMediaProxy({
 		projectId,
 		id,
 	}: {
@@ -583,7 +601,10 @@ class StorageService {
 		id: string;
 	}): Promise<File | null> {
 		const { mediaProxiesAdapter } = this.getProjectMediaAdapters({ projectId });
-		return mediaProxiesAdapter.get(id);
+		const marker = await mediaProxiesAdapter.get(`${id}.done`);
+		if (!marker) return null;
+		const file = await mediaProxiesAdapter.get(id);
+		return file && file.size > 0 ? file : null;
 	}
 
 	async deleteMediaProxy({
@@ -594,6 +615,7 @@ class StorageService {
 		id: string;
 	}): Promise<void> {
 		const { mediaProxiesAdapter } = this.getProjectMediaAdapters({ projectId });
+		await mediaProxiesAdapter.remove(`${id}.done`);
 		await mediaProxiesAdapter.remove(id);
 	}
 

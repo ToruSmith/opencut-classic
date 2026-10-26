@@ -224,16 +224,28 @@ async function resolveVideoNode({
 			retime: node.params.retime,
 		});
 	const maxSize = context.renderer.getVideoDecodeLimit();
-	const frame = await videoCache.getFrameAt({
-		...pickVideoSource({
+	const time = mediaTimeToSeconds({ time: roundMediaTime({ time: sourceTimeTicks }) });
+	const source = pickVideoSource({
+		mediaId: node.params.mediaId,
+		file: node.params.file,
+		proxyFile: node.params.proxyFile,
+		isPreview: maxSize !== undefined,
+	});
+	let frame = await videoCache
+		.getFrameAt({ ...source, time, maxSize })
+		.catch((error) => {
+			// 代理檔讀不到時改讀原始檔;原始檔本身的錯誤照常丟出
+			if (source.file === node.params.file) throw error;
+			return null;
+		});
+	if (!frame && source.file !== node.params.file) {
+		frame = await videoCache.getFrameAt({
 			mediaId: node.params.mediaId,
 			file: node.params.file,
-			proxyFile: node.params.proxyFile,
-			isPreview: maxSize !== undefined,
-		}),
-		time: mediaTimeToSeconds({ time: roundMediaTime({ time: sourceTimeTicks }) }),
-		maxSize,
-	});
+			time,
+			maxSize,
+		});
+	}
 	if (!frame) {
 		return null;
 	}
