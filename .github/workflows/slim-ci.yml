@@ -44,10 +44,8 @@ jobs:
         run: node scripts/report-bundle.mjs dist 40
 
       - name: Unit tests
-        id: tests
-        continue-on-error: true
         working-directory: apps/web
-        run: TAIL=150 ../../.github/scripts/run-step.sh "tests" bun test src
+        run: ../../.github/scripts/test-ratchet.sh
 
       - name: Fail if typecheck failed
         if: steps.typecheck.outcome == 'failure'
