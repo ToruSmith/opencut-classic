@@ -109,6 +109,8 @@
   - 沒有 GPU 可以實測:shader 通過 naga 只代表語法與型別正確,視覺結果要在瀏覽器確認。
   - 效果的輸出貼圖由呼叫者提供(`apply_with_encoder` 的 `acquire` 參數):合成器傳入自己的 `TexturePool`,每格回收重用;
     不要改回每個 pass 都 `create_render_texture`。效果不會修改輸入貼圖,所以 `apply_effect_groups` 不必先複製來源。
+  - `uploadTexture`:同 id、同尺寸時直接覆寫原貼圖(`Compositor::reusable_texture` + `GpuContext::write_offscreen_canvas_to_texture`),
+    播放中的影片不再每格配置新貼圖。
   - 高斯模糊的取樣數依 σ 決定(±3.5σ,上限 ±30),不是固定 61 點。
   - 風格化效果(`definitions/stylize.ts`):馬賽克 `pixelate`、色差 `chromatic-aberration`、色調分離 `posterize`。
   - 效果面板會依參數的 `dependencies` 隱藏用不到的欄位。

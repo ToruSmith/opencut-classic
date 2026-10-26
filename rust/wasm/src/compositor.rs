@@ -124,6 +124,14 @@ pub fn upload_texture(options: JsValue) -> Result<(), JsValue> {
                 ));
             };
 
+            // 同一個 id、同尺寸(例如播放中的影片每格更新)就覆寫原本的貼圖,不重新配置。
+            // 寫入與繪製都排在同一個 queue 上,前一格已送出的指令會先用完舊內容。
+            if let Some(existing) = runtime.compositor.reusable_texture(&id, width, height) {
+                gpu_runtime
+                    .context
+                    .write_offscreen_canvas_to_texture(&source, &existing, width, height);
+                return Ok(());
+            }
             let texture = import_canvas_texture(
                 &gpu_runtime.context,
                 &source,

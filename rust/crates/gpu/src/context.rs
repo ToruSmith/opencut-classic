@@ -510,7 +510,20 @@ impl GpuContext {
         label: &'static str,
     ) -> wgpu::Texture {
         let texture = self.create_render_texture(width, height, label);
+        self.write_offscreen_canvas_to_texture(canvas, &texture, width, height);
+        texture
+    }
 
+    /// 把畫布內容寫進「已存在」的貼圖。預覽播放時每格都會上傳影片畫面,
+    /// 重用同尺寸的貼圖可以省掉每格配置 / 釋放 GPU 記憶體。
+    #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+    pub fn write_offscreen_canvas_to_texture(
+        &self,
+        canvas: &wgpu::web_sys::OffscreenCanvas,
+        texture: &wgpu::Texture,
+        width: u32,
+        height: u32,
+    ) {
         if self.supports_external_texture_copies {
             self.queue.copy_external_image_to_texture(
                 &wgpu::CopyExternalImageSourceInfo {
@@ -519,7 +532,7 @@ impl GpuContext {
                     flip_y: false,
                 },
                 wgpu::CopyExternalImageDestInfo {
-                    texture: &texture,
+                    texture,
                     mip_level: 0,
                     origin: wgpu::Origin3d::ZERO,
                     aspect: wgpu::TextureAspect::All,
@@ -556,7 +569,7 @@ impl GpuContext {
 
             self.queue.write_texture(
                 wgpu::TexelCopyTextureInfo {
-                    texture: &texture,
+                    texture,
                     mip_level: 0,
                     origin: wgpu::Origin3d::ZERO,
                     aspect: wgpu::TextureAspect::All,
@@ -574,8 +587,6 @@ impl GpuContext {
                 },
             );
         }
-
-        texture
     }
 
     #[cfg(all(feature = "wasm", target_arch = "wasm32"))]

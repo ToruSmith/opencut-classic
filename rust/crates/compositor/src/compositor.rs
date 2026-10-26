@@ -284,6 +284,15 @@ impl Compositor {
         self.textures.upsert(id, texture);
     }
 
+    /// 已上傳且尺寸相同的貼圖,可以直接覆寫內容重用。
+    pub fn reusable_texture(&self, id: &str, width: u32, height: u32) -> Option<wgpu::Texture> {
+        self.textures
+            .get(id)
+            .map(|stored| stored.texture())
+            .filter(|texture| texture.width() == width && texture.height() == height)
+            .cloned()
+    }
+
     pub fn release_texture(&mut self, id: &str) {
         self.textures.remove(id);
     }
