@@ -1,8 +1,9 @@
 name: Slim CI
 
+# 推送到 slim 時由 deploy-pages.yml 呼叫(deploy 必須等這裡全部通過才會發佈),
+# 所以這裡不再自己監聽 push,避免同一次推送跑兩遍。要單獨跑可手動觸發。
 on:
-  push:
-    branches: [slim]
+  workflow_call:
   workflow_dispatch:
 
 concurrency:

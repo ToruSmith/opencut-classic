@@ -6,8 +6,12 @@
 ## 工作規則
 
 - **只在 `slim` 分支工作,不要動 `main`。**
-- 這個環境沒有 npm / bun 可以裝依賴,**驗證靠 GitHub Actions**:推到 `slim` 後,確認 `Slim CI`(型別檢查 + 打包 + 單元測試)與 `Deploy to GitHub Pages` 都通過才算完成。
-  - 看結果:`gh run list --branch slim`
+- 這個環境沒有 npm / bun 可以裝依賴,**驗證靠 GitHub Actions**。推到 `slim` 後只會觸發 `Deploy to GitHub Pages` 這一個 workflow,它裡面分三個 job:
+  - `ci`(呼叫 `slim-ci.yml`:型別檢查、打包、單元測試、shader 驗證)與 `build`(編譯 WASM 並打包網站)同時進行;
+  - `deploy` 要等 `ci` 與 `build` **都成功**才會發佈。CI 失敗 = 不會發佈。
+  - 全部通過才算完成。發佈後請依 `docs/qa-checklist.md` 在真實瀏覽器驗收(CI 抓不到畫面、聲音、效能的問題)。
+  - 看結果:`gh run list --branch slim`;要讀 annotations 得先用 `gh run view <run_id> --json jobs --jq '.jobs[]|"\(.name) \(.databaseId)"'` 找 job id(CI 的 job 名稱是 `ci / build`、`ci / shaders`)。
+  - `slim-ci.yml` 也能手動觸發(`workflow_dispatch`),用來在不部署的情況下單獨跑 CI。
   - 完整日誌下載會被擋(403),但 **annotations 可以讀**:
     `gh api repos/ToruSmith/opencut-classic/check-runs/<job_id>/annotations --jq '.[] | "\(.title)\n\(.message)"'`
     失敗訊息(`.github/scripts/run-step.sh`)與 `bundle-report` / `bundle-chunk-N` 打包大小報告都在裡面。

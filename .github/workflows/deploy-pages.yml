@@ -15,12 +15,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  # 型別檢查、打包、單元測試、shader 驗證。任何一項失敗,下面的 deploy 就不會執行。
+  ci:
+    uses: ./.github/workflows/slim-ci.yml
+
+  # 建置(編譯 WASM 要好幾分鐘,所以與 ci 同時進行)
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -58,5 +60,25 @@ jobs:
         with:
           path: apps/web/dist
 
+  # 只有 ci 與 build 都成功才會發佈
+  deploy:
+    needs: [ci, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: 部署完成,提醒驗收
+        run: |
+          url="${{ steps.deployment.outputs.page_url }}"
+          checklist="${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/docs/qa-checklist.md"
+          echo "::notice title=deployed::${url}"
+          {
+            echo "### 已部署:${url}"
+            echo
+            echo "CI 通過不代表畫面與聲音正確。請開啟網站,依 [實機驗收清單](${checklist}) 走一遍(約 5 分鐘)。"
+          } >> "$GITHUB_STEP_SUMMARY"
