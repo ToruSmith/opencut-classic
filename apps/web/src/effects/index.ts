@@ -13,18 +13,21 @@ export function resolveEffectPasses({
 	effectParams,
 	width,
 	height,
+	time = 0,
 }: {
 	definition: EffectDefinition;
 	effectParams: ParamValues;
 	width: number;
 	height: number;
+	/** 從片段開頭算起的秒數 */
+	time?: number;
 }): EffectPass[] {
 	if (definition.renderer.buildPasses) {
-		return definition.renderer.buildPasses({ effectParams, width, height });
+		return definition.renderer.buildPasses({ effectParams, width, height, time });
 	}
 	return definition.renderer.passes.map((pass) => ({
 		shader: pass.shader,
-		uniforms: pass.uniforms({ effectParams, width, height }),
+		uniforms: pass.uniforms({ effectParams, width, height, time }),
 	}));
 }
 

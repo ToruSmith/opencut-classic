@@ -19,6 +19,7 @@ const SHADERS: &[(&str, &str)] = &[
         include_str!("shaders/chromatic_aberration.wgsl"),
     ),
     ("posterize", include_str!("shaders/posterize.wgsl")),
+    ("film_grain", include_str!("shaders/film_grain.wgsl")),
 ];
 
 #[test]

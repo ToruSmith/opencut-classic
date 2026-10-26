@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
 	chromaticAberrationEffectDefinition,
+	filmGrainEffectDefinition,
 	pixelateEffectDefinition,
 	posterizeEffectDefinition,
 } from "../definitions/stylize";
@@ -11,15 +12,17 @@ const EXPECTED_UNIFORMS: Record<string, string[]> = {
 	pixelate: ["u_block"],
 	"chromatic-aberration": ["u_amount", "u_angle", "u_radial"],
 	posterize: ["u_levels"],
+	"film-grain": ["u_amount", "u_color", "u_seed", "u_shadow_protect", "u_size"],
 };
 
 const definitions = [
 	pixelateEffectDefinition,
 	chromaticAberrationEffectDefinition,
 	posterizeEffectDefinition,
+	filmGrainEffectDefinition,
 ];
 
-describe("馬賽克 / 色差 / 色調分離", () => {
+describe("馬賽克 / 色差 / 色調分離 / 底片顆粒", () => {
 	for (const definition of definitions) {
 		const pass = definition.renderer.passes[0]!;
 
@@ -75,5 +78,17 @@ describe("馬賽克 / 色差 / 色調分離", () => {
 		expect(at(1)).toBe(2);
 		expect(at(4.6)).toBe(5);
 		expect(at(99)).toBe(32);
+	});
+
+	test("底片顆粒的種子隨時間改變、同一時間固定,沒有時間時為 0", () => {
+		const pass = filmGrainEffectDefinition.renderer.passes[0]!;
+		const seedAt = (time?: number) =>
+			pass.uniforms({ effectParams: {}, width: 1920, height: 1080, time }).u_seed;
+		expect(seedAt()).toBe(0);
+		expect(seedAt(Number.NaN)).toBe(0);
+		expect(seedAt(1)).toBe(24);
+		expect(seedAt(1)).toBe(seedAt(1.01));
+		expect(seedAt(2)).not.toBe(seedAt(1));
+		expect(Number.isInteger(seedAt(12345.678))).toBe(true);
 	});
 });

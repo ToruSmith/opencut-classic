@@ -20,6 +20,8 @@ export interface EffectPassTemplate {
 		effectParams: ParamValues;
 		width: number;
 		height: number;
+		/** 從片段開頭算起的秒數。會隨時間變化的效果(例如底片顆粒)用來當亂數種子;縮圖預覽為 0。 */
+		time?: number;
 	}): Record<string, EffectUniformValue>;
 }
 
@@ -29,6 +31,7 @@ export interface EffectRendererConfig {
 		effectParams: ParamValues;
 		width: number;
 		height: number;
+		time?: number;
 	}) => EffectPass[];
 }
 

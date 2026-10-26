@@ -1,4 +1,4 @@
-import { mediaTimeToSeconds, roundMediaTime } from "@/wasm";
+import { TICKS_PER_SECOND, mediaTimeToSeconds, roundMediaTime } from "@/wasm";
 import { getElementLocalTime } from "@/animation";
 import { resolveEffectParamsAtTime } from "@/animation/effect-param-channel";
 import {
@@ -124,6 +124,7 @@ function resolveEffectPassGroups({
 				effectParams: resolvedParams,
 				width,
 				height,
+				time: localTime / TICKS_PER_SECOND,
 			});
 		});
 }
@@ -518,6 +519,7 @@ function resolveEffectLayerNode({
 		effectParams: node.params.effectParams,
 		width: context.renderer.width,
 		height: context.renderer.height,
+		time: Math.max(0, time - node.params.timeOffset) / TICKS_PER_SECOND,
 	});
 	if (passes.length === 0) {
 		return null;

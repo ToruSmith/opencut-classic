@@ -27,6 +27,8 @@ const CHROMATIC_ABERRATION_SHADER_ID: &str = "chromatic-aberration";
 const CHROMATIC_ABERRATION_SHADER_SOURCE: &str = include_str!("shaders/chromatic_aberration.wgsl");
 const POSTERIZE_SHADER_ID: &str = "posterize";
 const POSTERIZE_SHADER_SOURCE: &str = include_str!("shaders/posterize.wgsl");
+const FILM_GRAIN_SHADER_ID: &str = "film-grain";
+const FILM_GRAIN_SHADER_SOURCE: &str = include_str!("shaders/film_grain.wgsl");
 
 pub struct ApplyEffectsOptions<'a> {
     pub source: &'a wgpu::Texture,
@@ -196,6 +198,10 @@ impl EffectPipeline {
             (
                 POSTERIZE_SHADER_ID.to_string(),
                 build_pipeline("effects-posterize", POSTERIZE_SHADER_SOURCE),
+            ),
+            (
+                FILM_GRAIN_SHADER_ID.to_string(),
+                build_pipeline("effects-film-grain", FILM_GRAIN_SHADER_SOURCE),
             ),
         ]);
 
@@ -503,6 +509,23 @@ fn pack_effect_uniforms(
             resolution: [width as f32, height as f32],
             direction: [0.0, 0.0],
             scalars: [read_number_uniform(pass, "u_levels")?, 0.0, 0.0, 0.0],
+        });
+    }
+
+    if shader == FILM_GRAIN_SHADER_ID {
+        reject_unknown_uniforms(
+            pass,
+            &["u_amount", "u_size", "u_seed", "u_color", "u_shadow_protect"],
+        )?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [read_number_uniform(pass, "u_shadow_protect")?, 0.0],
+            scalars: [
+                read_number_uniform(pass, "u_amount")?,
+                read_number_uniform(pass, "u_size")?,
+                read_number_uniform(pass, "u_seed")?,
+                read_number_uniform(pass, "u_color")?,
+            ],
         });
     }
 

@@ -14,6 +14,7 @@ import {
 } from "./color";
 import {
 	chromaticAberrationEffectDefinition,
+	filmGrainEffectDefinition,
 	pixelateEffectDefinition,
 	posterizeEffectDefinition,
 } from "./stylize";
@@ -41,6 +42,7 @@ const defaultEffects = [
 	pixelateEffectDefinition,
 	chromaticAberrationEffectDefinition,
 	posterizeEffectDefinition,
+	filmGrainEffectDefinition,
 ];
 
 export function registerDefaultEffects(): void {

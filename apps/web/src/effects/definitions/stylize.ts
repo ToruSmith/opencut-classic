@@ -1,7 +1,7 @@
 import type { EffectDefinition } from "@/effects/types";
 
 /**
- * 風格化:馬賽克、色差(RGB 分離)、色調分離。著色器在 rust/crates/effects/src/shaders/。
+ * 風格化:馬賽克、色差(RGB 分離)、色調分離、底片顆粒。著色器在 rust/crates/effects/src/shaders/。
  * 參考 Kdenlive / MLT 的 pixelize、OBS 與 Kdenlive 的 RGB split、Shotcut 的 Posterize。
  * uniform 名稱必須和 pipeline.rs 的 pack_effect_uniforms 完全一致(多一個、少一個都會報錯)。
  *
@@ -11,6 +11,10 @@ import type { EffectDefinition } from "@/effects/types";
 export const PIXELATE_SHADER = "pixelate";
 export const CHROMATIC_ABERRATION_SHADER = "chromatic-aberration";
 export const POSTERIZE_SHADER = "posterize";
+export const FILM_GRAIN_SHADER = "film-grain";
+
+/** 顆粒每秒換幾次圖樣。固定值讓預覽與匯出(不論幀率)看起來一致,也和底片 24 格的質感接近。 */
+const GRAIN_UPDATES_PER_SECOND = 24;
 
 const REFERENCE_WIDTH = 1920;
 
@@ -120,6 +124,41 @@ export const posterizeEffectDefinition: EffectDefinition = {
 					const p = effectParams as Record<string, unknown>;
 					const levels = Math.round(num({ params: p, key: "levels", fallback: 6 }));
 					return { u_levels: Math.min(32, Math.max(2, levels)) };
+				},
+			},
+		],
+	},
+};
+
+export const filmGrainEffectDefinition: EffectDefinition = {
+	type: "film-grain",
+	name: "底片顆粒",
+	keywords: ["film grain", "grain", "noise", "vintage", "底片", "顆粒", "雜訊", "復古"],
+	params: [
+		{ key: "amount", label: "強度", type: "number", default: 25, min: 0, max: 100, step: 1 },
+		{ key: "size", label: "顆粒大小", type: "number", default: 1.5, min: 1, max: 8, step: 0.1 },
+		{ key: "shadows", label: "暗部保留", type: "number", default: 50, min: 0, max: 100, step: 1 },
+		{ key: "color", label: "彩色顆粒", type: "boolean", default: false },
+	],
+	renderer: {
+		passes: [
+			{
+				shader: FILM_GRAIN_SHADER,
+				uniforms: ({ effectParams, width, time }) => {
+					const p = effectParams as Record<string, unknown>;
+					const seconds = Number.isFinite(time) ? Math.max(0, time ?? 0) : 0;
+					return {
+						u_amount: Math.min(1, Math.max(0, num({ params: p, key: "amount", fallback: 25 }) / 100)),
+						u_size: Math.max(
+							1,
+							scaleToWidth({ pixels: num({ params: p, key: "size", fallback: 1.5 }), width }),
+						),
+						// 種子是整數格數;shader 轉成 u32,保持在 2^24 以內以免 f32 失去精度
+						u_seed: Math.floor(seconds * GRAIN_UPDATES_PER_SECOND) % 16_777_216,
+						u_color: p.color === true ? 1 : 0,
+						u_shadow_protect:
+							Math.min(100, Math.max(0, num({ params: p, key: "shadows", fallback: 50 }))) / 100,
+					};
 				},
 			},
 		],
