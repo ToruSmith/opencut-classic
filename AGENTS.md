@@ -89,6 +89,9 @@
     找不到資料的 pass 會被拿掉。Rust 端 `EffectPassDescriptor.texture_id` → `EffectPass.texture`,LUT 管線多綁一組 group(2)。
   - 需要第二張貼圖卻沒拿到的 pass(縮圖預覽的 `applyEffectPasses` 沒有貼圖庫)在 Rust 會被略過,原圖照常輸出。
   - 介面:`effects/components/lut-picker.tsx`,參數 `lut` 設為 `hidden`(`BaseParamDefinition.hidden`,兩個屬性面板都會略過)。
+  - **內建風格**(`lut/presets.ts`,純函式,有測試):id 以 `builtin-` 開頭,第一次用到時由色彩公式產生 33³,
+    **不存進專案**(`getStoredLut` 找不到匯入的 LUT 時會退回內建)。LUT 效果預設 `builtin-teal-orange`。
+    「負片」是最容易目測 LUT 管線是否正確的一個。
 
 ## 專案儲存、備份與重新連結(2026-10)
 
@@ -126,7 +129,12 @@
   - 效果定義的 `uniforms` / `buildPasses` 會拿到 `time`(片段開頭起算的秒數,縮圖為 0),會動的效果用它當種子。
     底片顆粒每秒換 24 次圖樣,和匯出幀率無關。
   - 遮罩羽化(`masks` crate)的 JFA 中間貼圖也由呼叫者的 `acquire` 提供,合成器傳入貼圖池。
+  - 動態效果(`definitions/motion.ts`):畫面震動 `camera-shake`、放射模糊 `zoom-blur`、故障 `glitch`、鏡像 `mirror`。
+    震動與故障用 `time` 與「種子」參數驅動(shader 內 PCG 雜湊),同一時間點預覽與匯出相同。
+  - 效果作用在「畫面大小的圖層」上(片段先畫進整張畫面再套效果),所以震動的放大填滿、鏡像都以整個畫面為準。
   - 效果面板會依參數的 `dependencies` 隱藏用不到的欄位。
+  - 特效片段的名稱:新建時用定義的中文名稱;時間軸顯示用 `effects/display-name.ts`,
+    舊版自動產生的英文名稱(`Film-grain`)會改顯示中文,使用者改過的名稱不變。
 - **轉場(進出場動畫)**:`transitions/presets.ts` 是純函式,把動畫展開成關鍵影格(動畫基準值要從 `element.params` 讀,不是 `element.opacity` 這類不存在的欄位)。測試在 `transitions/__tests__/`。
 - 字幕解析(`subtitles/`)、字幕切段(`transcription/caption.ts`)也都是純函式,有測試;中文沒有空格,按標點與字數(12 字)切。
 

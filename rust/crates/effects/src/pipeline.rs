@@ -31,6 +31,14 @@ const FILM_GRAIN_SHADER_ID: &str = "film-grain";
 const FILM_GRAIN_SHADER_SOURCE: &str = include_str!("shaders/film_grain.wgsl");
 const LUT_SHADER_ID: &str = "lut";
 const LUT_SHADER_SOURCE: &str = include_str!("shaders/lut.wgsl");
+const CAMERA_SHAKE_SHADER_ID: &str = "camera-shake";
+const CAMERA_SHAKE_SHADER_SOURCE: &str = include_str!("shaders/camera_shake.wgsl");
+const ZOOM_BLUR_SHADER_ID: &str = "zoom-blur";
+const ZOOM_BLUR_SHADER_SOURCE: &str = include_str!("shaders/zoom_blur.wgsl");
+const GLITCH_SHADER_ID: &str = "glitch";
+const GLITCH_SHADER_SOURCE: &str = include_str!("shaders/glitch.wgsl");
+const MIRROR_SHADER_ID: &str = "mirror";
+const MIRROR_SHADER_SOURCE: &str = include_str!("shaders/mirror.wgsl");
 
 /// 需要第二張貼圖(group 2)的 shader
 fn requires_texture(shader: &str) -> bool {
@@ -227,6 +235,22 @@ impl EffectPipeline {
             (
                 FILM_GRAIN_SHADER_ID.to_string(),
                 build_pipeline("effects-film-grain", FILM_GRAIN_SHADER_SOURCE),
+            ),
+            (
+                CAMERA_SHAKE_SHADER_ID.to_string(),
+                build_pipeline("effects-camera-shake", CAMERA_SHAKE_SHADER_SOURCE),
+            ),
+            (
+                ZOOM_BLUR_SHADER_ID.to_string(),
+                build_pipeline("effects-zoom-blur", ZOOM_BLUR_SHADER_SOURCE),
+            ),
+            (
+                GLITCH_SHADER_ID.to_string(),
+                build_pipeline("effects-glitch", GLITCH_SHADER_SOURCE),
+            ),
+            (
+                MIRROR_SHADER_ID.to_string(),
+                build_pipeline("effects-mirror", MIRROR_SHADER_SOURCE),
             ),
             (
                 LUT_SHADER_ID.to_string(),
@@ -595,6 +619,74 @@ fn pack_effect_uniforms(
                 read_number_uniform(pass, "u_size")?,
                 read_number_uniform(pass, "u_seed")?,
                 read_number_uniform(pass, "u_color")?,
+            ],
+        });
+    }
+
+    if shader == CAMERA_SHAKE_SHADER_ID {
+        reject_unknown_uniforms(
+            pass,
+            &["u_amount", "u_rotation", "u_fill", "u_seed", "u_time", "u_speed"],
+        )?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [
+                read_number_uniform(pass, "u_time")?,
+                read_number_uniform(pass, "u_speed")?,
+            ],
+            scalars: [
+                read_number_uniform(pass, "u_amount")?,
+                read_number_uniform(pass, "u_rotation")?,
+                read_number_uniform(pass, "u_fill")?,
+                read_number_uniform(pass, "u_seed")?,
+            ],
+        });
+    }
+
+    if shader == ZOOM_BLUR_SHADER_ID {
+        reject_unknown_uniforms(pass, &["u_strength", "u_center_x", "u_center_y"])?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [0.0, 0.0],
+            scalars: [
+                read_number_uniform(pass, "u_strength")?,
+                read_number_uniform(pass, "u_center_x")?,
+                read_number_uniform(pass, "u_center_y")?,
+                0.0,
+            ],
+        });
+    }
+
+    if shader == GLITCH_SHADER_ID {
+        reject_unknown_uniforms(
+            pass,
+            &["u_intensity", "u_band", "u_shift", "u_seed", "u_time", "u_rate"],
+        )?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [
+                read_number_uniform(pass, "u_time")?,
+                read_number_uniform(pass, "u_rate")?,
+            ],
+            scalars: [
+                read_number_uniform(pass, "u_intensity")?,
+                read_number_uniform(pass, "u_band")?,
+                read_number_uniform(pass, "u_shift")?,
+                read_number_uniform(pass, "u_seed")?,
+            ],
+        });
+    }
+
+    if shader == MIRROR_SHADER_ID {
+        reject_unknown_uniforms(pass, &["u_mode", "u_flip"])?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [0.0, 0.0],
+            scalars: [
+                read_number_uniform(pass, "u_mode")?,
+                read_number_uniform(pass, "u_flip")?,
+                0.0,
+                0.0,
             ],
         });
     }

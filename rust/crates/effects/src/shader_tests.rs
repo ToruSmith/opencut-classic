@@ -21,6 +21,10 @@ const SHADERS: &[(&str, &str)] = &[
     ("posterize", include_str!("shaders/posterize.wgsl")),
     ("film_grain", include_str!("shaders/film_grain.wgsl")),
     ("lut", include_str!("shaders/lut.wgsl")),
+    ("camera_shake", include_str!("shaders/camera_shake.wgsl")),
+    ("zoom_blur", include_str!("shaders/zoom_blur.wgsl")),
+    ("glitch", include_str!("shaders/glitch.wgsl")),
+    ("mirror", include_str!("shaders/mirror.wgsl")),
 ];
 
 #[test]

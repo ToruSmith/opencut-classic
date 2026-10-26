@@ -3,6 +3,12 @@ import { blurEffectDefinition } from "./blur";
 import { chromaKeyEffectDefinition } from "./chroma-key";
 import { lutEffectDefinition } from "./lut";
 import {
+	cameraShakeEffectDefinition,
+	glitchEffectDefinition,
+	mirrorEffectDefinition,
+	zoomBlurEffectDefinition,
+} from "./motion";
+import {
 	glowEffectDefinition,
 	sharpenEffectDefinition,
 	splitToneEffectDefinition,
@@ -45,6 +51,10 @@ const defaultEffects = [
 	posterizeEffectDefinition,
 	filmGrainEffectDefinition,
 	lutEffectDefinition,
+	cameraShakeEffectDefinition,
+	zoomBlurEffectDefinition,
+	glitchEffectDefinition,
+	mirrorEffectDefinition,
 ];
 
 export function registerDefaultEffects(): void {
