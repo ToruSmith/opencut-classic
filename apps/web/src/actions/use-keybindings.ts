@@ -4,6 +4,10 @@ import { useEditor } from "@/editor/use-editor";
 import { useKeybindingsStore } from "@/actions/keybindings-store";
 import { isTypableDOMElement } from "@/utils/browser";
 
+const ARROW_KEYS: ReadonlySet<string> = new Set(["up", "down", "left", "right"]);
+const ARROW_KEY_WIDGETS =
+	'[role="slider"],[role="listbox"],[role="option"],[role="menu"],[role="menuitem"],[role="radiogroup"],[role="tablist"],select';
+
 /**
  * a composable that hooks to the caller component's
  * lifecycle and hooks to the keyboard events to fire
@@ -44,6 +48,14 @@ export function useKeybindingsListener() {
 			if (!boundAction) return;
 
 			if (isTextInput) return;
+			// 滑桿、下拉選單等元件本身就用方向鍵操作,焦點在那裡時不要搶走
+			if (
+				ARROW_KEYS.has(binding) &&
+				activeElement instanceof HTMLElement &&
+				activeElement.closest(ARROW_KEY_WIDGETS)
+			) {
+				return;
+			}
 			if (boundAction === "paste-copied") {
 				if (!editor.clipboard.hasEntry()) return;
 				ev.preventDefault();

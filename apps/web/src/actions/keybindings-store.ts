@@ -190,6 +190,15 @@ export const useKeybindingsStore = create<KeybindingsState>()(
 				runMigrations({ state: persisted, fromVersion: version }),
 			merge: (persisted, current) => {
 				if (!isPersistedState(persisted)) return current;
+				// 沒自訂過快捷鍵的人一律用「目前的」預設值。
+				// 否則儲存下來的舊預設會蓋掉新版本新增的快捷鍵(新功能按了沒反應)。
+				if (!persisted.isCustomized) {
+					return {
+						...current,
+						keybindings: getDefaultShortcuts(),
+						isCustomized: false,
+					};
+				}
 				const entries = Object.entries(persisted.keybindings);
 				// Persistence boundary: keys are normalized by the migration chain.
 				// eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion

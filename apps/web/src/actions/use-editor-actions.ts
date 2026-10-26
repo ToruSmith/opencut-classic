@@ -17,6 +17,7 @@ import {
 } from "@/wasm";
 import { useKeyframeSelection } from "@/timeline/hooks/element/use-keyframe-selection";
 import { getElementsAtTime, hasMediaId } from "@/timeline";
+import { findAdjacentEditPoint } from "@/timeline/edit-points";
 import { cancelInteraction } from "@/editor/cancel-interaction";
 import { invokeAction } from "@/actions";
 import { canToggleSourceAudio } from "@/timeline/audio-separation";
@@ -330,6 +331,63 @@ export function useEditorActions() {
 				default:
 					return;
 			}
+		},
+		undefined,
+	);
+
+	useActionHandler(
+		"ripple-delete-selected",
+		() => {
+			// 只有選取「片段」時才有空隙可補;關鍵影格與遮罩點照一般刪除處理
+			if (editor.selection.getActiveSelectionKind() !== "elements") {
+				invokeAction("delete-selected");
+				return;
+			}
+			if (selectedElements.length === 0) return;
+			editor.timeline.deleteElements({
+				elements: selectedElements,
+				ripple: true,
+			});
+		},
+		undefined,
+	);
+
+	useActionHandler(
+		"cut-selected",
+		() => {
+			if (editor.selection.getActiveSelectionKind() !== "elements") return;
+			if (selectedElements.length === 0) return;
+			// 複製失敗就不刪,免得東西不見又貼不回來
+			if (!editor.clipboard.copy()) return;
+			editor.timeline.deleteElements({ elements: selectedElements });
+		},
+		undefined,
+	);
+
+	useActionHandler(
+		"goto-prev-edit",
+		() => {
+			const target = findAdjacentEditPoint({
+				tracks: editor.scenes.getActiveScene().tracks,
+				time: editor.playback.getCurrentTime(),
+				direction: "prev",
+			});
+			if (target === null) return;
+			editor.playback.seek({ time: mediaTime({ ticks: target }) });
+		},
+		undefined,
+	);
+
+	useActionHandler(
+		"goto-next-edit",
+		() => {
+			const target = findAdjacentEditPoint({
+				tracks: editor.scenes.getActiveScene().tracks,
+				time: editor.playback.getCurrentTime(),
+				direction: "next",
+			});
+			if (target === null) return;
+			editor.playback.seek({ time: mediaTime({ ticks: target }) });
 		},
 		undefined,
 	);

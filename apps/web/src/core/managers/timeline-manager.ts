@@ -251,10 +251,12 @@ export class TimelineManager {
 
 	deleteElements({
 		elements,
+		ripple = false,
 	}: {
 		elements: { trackId: string; elementId: string }[];
+		ripple?: boolean;
 	}): void {
-		const command = new DeleteElementsCommand({ elements });
+		const command = new DeleteElementsCommand({ elements, ripple });
 		this.editor.command.execute({ command });
 	}
 

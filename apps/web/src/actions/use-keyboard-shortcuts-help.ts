@@ -18,6 +18,8 @@ export interface KeyboardShortcut {
 }
 
 function formatKey({ key }: { key: string }): string {
+	// 單獨的「-」「=」是時間軸縮放鍵,不能套用下面把舊格式 "ctrl-z" 的 - 換成 + 的規則
+	if (key === "-" || key === "=") return key;
 	return key
 		.replace("ctrl", getPlatformSpecialKey())
 		.replace("alt", getPlatformAlternateKey())

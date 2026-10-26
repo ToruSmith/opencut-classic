@@ -82,6 +82,30 @@ export const ACTIONS = {
 		description: "刪除選取項目",
 		category: "editing",
 	},
+	"cut-selected": {
+		description: "剪下選取項目",
+		category: "editing",
+	},
+	"ripple-delete-selected": {
+		description: "波紋刪除(刪除並補上空隙)",
+		category: "editing",
+	},
+	"goto-prev-edit": {
+		description: "跳到上一個剪輯點",
+		category: "navigation",
+	},
+	"goto-next-edit": {
+		description: "跳到下一個剪輯點",
+		category: "navigation",
+	},
+	"timeline-zoom-in": {
+		description: "放大時間軸",
+		category: "timeline",
+	},
+	"timeline-zoom-out": {
+		description: "縮小時間軸",
+		category: "timeline",
+	},
 	"copy-selected": {
 		description: "複製選取項目",
 		category: "editing",
@@ -167,6 +191,13 @@ const ACTION_DEFAULT_SHORTCUTS = [
 	["split-right", ["w"]],
 	["delete-selected", ["backspace", "delete"]],
 	["copy-selected", ["ctrl+c"]],
+	["cut-selected", ["ctrl+x"]],
+	["ripple-delete-selected", ["shift+delete", "shift+backspace"]],
+	["goto-prev-edit", ["up"]],
+	["goto-next-edit", ["down"]],
+	["toggle-bookmark", ["m"]],
+	["timeline-zoom-in", ["="]],
+	["timeline-zoom-out", ["-"]],
 	["paste-copied", ["ctrl+v"]],
 	["toggle-snapping", ["n"]],
 	["select-all", ["ctrl+a"]],
