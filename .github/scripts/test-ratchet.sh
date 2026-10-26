@@ -8,11 +8,20 @@ set -uo pipefail
 
 baseline="../../.github/known-failing-tests.txt"
 log="$(mktemp)"
-bun test src 2>&1 | tee "$log"
+bash -c "${RATCHET_TEST_CMD:-bun test src}" 2>&1 | tee "$log"
 bun_exit=${PIPESTATUS[0]}
 
 failing="$(mktemp)"
-sed 's/\x1b\[[0-9;]*m//g' "$log" | grep -E '^\(fail\)' | sed -E 's/ \[[0-9.]+ms\]$//' | LC_ALL=C sort -u > "$failing"
+{
+  # 失敗的測試
+  sed 's/\x1b\[[0-9;]*m//g' "$log" | grep -E '^\(fail\)' | sed -E 's/ \[[0-9.]+ms\]$//'
+  # 整個測試檔載入失敗時 bun 只會印「Unhandled error between tests」,不會有 (fail) 行,
+  # 那個檔案裡的測試就等於沒跑。也要算成失敗。
+  sed 's/\x1b\[[0-9;]*m//g' "$log" | awk '
+    /Unhandled error between tests/ { wait = 1; next }
+    wait && /^error:/ { sub(/^error: */, ""); print "(unhandled) " $0; wait = 0 }
+  '
+} | LC_ALL=C sort -u > "$failing"
 count=$(wc -l < "$failing")
 
 enc() { local s=${1//'%'/'%25'}; s=${s//$'\r'/'%0D'}; echo "${s//$'\n'/'%0A'}"; }
