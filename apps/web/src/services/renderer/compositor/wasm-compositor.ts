@@ -43,6 +43,12 @@ class WasmCompositor {
 	private canvas: HTMLCanvasElement | null = null;
 	private initializedSize: { width: number; height: number } | null = null;
 	private cache = new Map<string, RenderedCacheEntry | ExternalCacheEntry>();
+	/**
+	 * 主執行緒裡 mediabunny 的 CanvasSink 給的是 HTMLCanvasElement,上傳前要轉成 OffscreenCanvas。
+	 * 每個貼圖 id 留一張同尺寸的中轉畫布重複使用,不必每格都 new 一張。
+	 * 上傳(copyExternalImageToTexture / getImageData)在呼叫當下就讀取內容,下一格覆寫是安全的。
+	 */
+	private staging = new Map<string, OffscreenCanvas>();
 
 	ensureInitialized({ width, height }: { width: number; height: number }) {
 		if (!this.canvas) {
@@ -75,6 +81,7 @@ class WasmCompositor {
 			if (!nextIds.has(previousId)) {
 				releaseTexture(previousId);
 				this.cache.delete(previousId);
+				this.staging.delete(previousId);
 			}
 		}
 
@@ -120,6 +127,15 @@ class WasmCompositor {
 				width: texture.width,
 				height: texture.height,
 				label: `texture upload ${texture.id}`,
+				reuse:
+					typeof OffscreenCanvas !== "undefined" &&
+					texture.source instanceof OffscreenCanvas
+						? null
+						: this.getStagingCanvas({
+								id: texture.id,
+								width: texture.width,
+								height: texture.height,
+							}),
 			}),
 			width: texture.width,
 			height: texture.height,
@@ -130,6 +146,25 @@ class WasmCompositor {
 			width: texture.width,
 			height: texture.height,
 		});
+	}
+
+	private getStagingCanvas({
+		id,
+		width,
+		height,
+	}: {
+		id: string;
+		width: number;
+		height: number;
+	}): OffscreenCanvas | null {
+		if (typeof OffscreenCanvas === "undefined") return null;
+		const existing = this.staging.get(id);
+		if (existing && existing.width === width && existing.height === height) {
+			return existing;
+		}
+		const canvas = new OffscreenCanvas(width, height);
+		this.staging.set(id, canvas);
+		return canvas;
 	}
 
 	private syncRenderedTexture(texture: RenderedTextureDescriptor) {
@@ -202,13 +237,16 @@ function ensureOffscreenCanvas({
 	width,
 	height,
 	label,
+	reuse = null,
 }: {
 	source: CanvasImageSource;
 	width: number;
 	height: number;
 	label: string;
+	/** 可重複使用的中轉畫布(尺寸需相同);沒有就新建 */
+	reuse?: OffscreenCanvas | null;
 }): OffscreenCanvas {
-	if (source instanceof OffscreenCanvas) {
+	if (typeof OffscreenCanvas !== "undefined" && source instanceof OffscreenCanvas) {
 		return source;
 	}
 
@@ -216,7 +254,10 @@ function ensureOffscreenCanvas({
 		throw new Error(`OffscreenCanvas is required for ${label}`);
 	}
 
-	const canvas = new OffscreenCanvas(width, height);
+	const canvas =
+		reuse && reuse.width === width && reuse.height === height
+			? reuse
+			: new OffscreenCanvas(width, height);
 	const context = canvas.getContext("2d");
 	if (!context) {
 		throw new Error(`Failed to get 2d context for ${label}`);

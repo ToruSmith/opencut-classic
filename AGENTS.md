@@ -117,6 +117,10 @@
     不要改回每個 pass 都 `create_render_texture`。效果不會修改輸入貼圖,所以 `apply_effect_groups` 不必先複製來源。
   - `uploadTexture`:同 id、同尺寸時直接覆寫原貼圖(`Compositor::reusable_texture` + `GpuContext::write_offscreen_canvas_to_texture`),
     播放中的影片不再每格配置新貼圖。
+  - 主執行緒裡 mediabunny 的 `CanvasSink` 給的是 **HTMLCanvasElement**(不是 OffscreenCanvas),上傳前要先畫到 OffscreenCanvas。
+    `WasmCompositor` 每個貼圖 id 留一張中轉畫布重用(`staging`),不要改回每格 `new OffscreenCanvas`。
+    改成直接上傳 `VideoFrame`(`VideoSampleSink`)評估過:會失去 CanvasSink 的旋轉處理與預覽縮小解碼,
+    wgpu 的 VideoFrame 來源還要開 `web_sys_unstable_apis`,WebGL 後備也不支援,所以沒做。
   - 高斯模糊的取樣數依 σ 決定(±3.5σ,上限 ±30),不是固定 61 點。
   - 風格化效果(`definitions/stylize.ts`):馬賽克 `pixelate`、色差 `chromatic-aberration`、色調分離 `posterize`、底片顆粒 `film-grain`。
   - 效果定義的 `uniforms` / `buildPasses` 會拿到 `time`(片段開頭起算的秒數,縮圖為 0),會動的效果用它當種子。
