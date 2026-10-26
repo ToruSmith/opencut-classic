@@ -17,6 +17,14 @@ count=$(wc -l < "$failing")
 
 enc() { local s=${1//'%'/'%25'}; s=${s//$'\r'/'%0D'}; echo "${s//$'\n'/'%0A'}"; }
 
+# 診斷:預載檔(test-setup.ts)有沒有成功,以及失敗測試的錯誤訊息(去重後最多 12 種)
+clean="$(mktemp)"
+sed 's/\x1b\[[0-9;]*m//g' "$log" > "$clean"
+setup_msgs="$(grep -A6 '\[test-setup\]' "$clean" | head -c 3000)"
+[ -n "$setup_msgs" ] && echo "::warning title=test-setup 警告::$(enc "$setup_msgs")"
+err_msgs="$(grep -E '^(error|[A-Za-z]*Error):|^\s+(error|TypeError|ReferenceError)' "$clean" | sed -E 's/^\s+//' | LC_ALL=C sort | uniq -c | sort -rn | head -12 | head -c 3000)"
+[ -n "$err_msgs" ] && echo "::notice title=test-errors::$(enc "$err_msgs")"
+
 if [ ! -f "$baseline" ]; then
   echo "::notice title=failing-tests (${count})::$(enc "$(head -c 50000 "$failing")")"
   exit 0
