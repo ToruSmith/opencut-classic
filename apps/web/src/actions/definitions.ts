@@ -98,6 +98,14 @@ export const ACTIONS = {
 		description: "跳到下一個剪輯點",
 		category: "navigation",
 	},
+	"goto-prev-bookmark": {
+		description: "跳到上一個書籤",
+		category: "navigation",
+	},
+	"goto-next-bookmark": {
+		description: "跳到下一個書籤",
+		category: "navigation",
+	},
 	"timeline-zoom-in": {
 		description: "放大時間軸",
 		category: "timeline",
@@ -196,6 +204,8 @@ const ACTION_DEFAULT_SHORTCUTS = [
 	["goto-prev-edit", ["up"]],
 	["goto-next-edit", ["down"]],
 	["toggle-bookmark", ["m"]],
+	["goto-prev-bookmark", ["shift+up"]],
+	["goto-next-bookmark", ["shift+down"]],
 	["timeline-zoom-in", ["="]],
 	["timeline-zoom-out", ["-"]],
 	["paste-copied", ["ctrl+v"]],

@@ -50,7 +50,7 @@ export function useKeybindingsListener() {
 			if (isTextInput) return;
 			// 滑桿、下拉選單等元件本身就用方向鍵操作,焦點在那裡時不要搶走
 			if (
-				ARROW_KEYS.has(binding) &&
+				ARROW_KEYS.has(binding.split("+").pop() ?? "") &&
 				activeElement instanceof HTMLElement &&
 				activeElement.closest(ARROW_KEY_WIDGETS)
 			) {

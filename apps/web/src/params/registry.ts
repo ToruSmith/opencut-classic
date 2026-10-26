@@ -12,6 +12,11 @@ import type {
 import { DEFAULTS } from "@/timeline/defaults";
 import { VOLUME_DB_MAX, VOLUME_DB_MIN } from "@/timeline/audio-constants";
 import {
+	AUDIO_FADE_IN_KEY,
+	AUDIO_FADE_MAX_SECONDS,
+	AUDIO_FADE_OUT_KEY,
+} from "@/timeline/audio-fade";
+import {
 	CORNER_RADIUS_MAX,
 	CORNER_RADIUS_MIN,
 } from "@/text/background";
@@ -169,6 +174,26 @@ const audioElementParams: ElementParamDefinition[] = [
 		label: "靜音",
 		type: "boolean",
 		default: false,
+		keyframable: false,
+	},
+	{
+		key: AUDIO_FADE_IN_KEY,
+		label: "淡入(秒)",
+		type: "number",
+		default: 0,
+		min: 0,
+		max: AUDIO_FADE_MAX_SECONDS,
+		step: 0.1,
+		keyframable: false,
+	},
+	{
+		key: AUDIO_FADE_OUT_KEY,
+		label: "淡出(秒)",
+		type: "number",
+		default: 0,
+		min: 0,
+		max: AUDIO_FADE_MAX_SECONDS,
+		step: 0.1,
 		keyframable: false,
 	},
 ];

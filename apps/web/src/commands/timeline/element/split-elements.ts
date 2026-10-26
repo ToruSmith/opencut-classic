@@ -9,6 +9,7 @@ import { EditorCore } from "@/core";
 import { isRetimableElement } from "@/timeline";
 import { splitAnimationsAtTime } from "@/animation";
 import { getSourceSpanAtClipTime } from "@/retime";
+import { splitAudioFadeParams } from "@/timeline/audio-fade";
 import {
 	addMediaTime,
 	type MediaTime,
@@ -117,6 +118,8 @@ export class SplitElementsCommand extends Command {
 					splitTime: relativeTime,
 					shouldIncludeSplitBoundary: true,
 				});
+				// 左半留淡入、右半留淡出
+				const fadeParams = splitAudioFadeParams({ params: element.params });
 				let splitResult: TimelineElement[];
 
 				const leftTrimEnd = addMediaTime({
@@ -135,6 +138,7 @@ export class SplitElementsCommand extends Command {
 							duration: leftVisibleDuration,
 							trimEnd: leftTrimEnd,
 							name: `${element.name} (left)`,
+							params: fadeParams.left,
 							animations: leftAnimations,
 							...(retimeRef !== undefined ? { retime: retimeRef } : {}),
 						},
@@ -153,6 +157,7 @@ export class SplitElementsCommand extends Command {
 							duration: rightVisibleDuration,
 							trimStart: rightTrimStart,
 							name: `${element.name} (right)`,
+							params: fadeParams.right,
 							animations: rightAnimations,
 							...(retimeRef !== undefined ? { retime: retimeRef } : {}),
 						},
@@ -169,6 +174,7 @@ export class SplitElementsCommand extends Command {
 							duration: leftVisibleDuration,
 							trimEnd: leftTrimEnd,
 							name: `${element.name} (left)`,
+							params: fadeParams.left,
 							animations: leftAnimations,
 							...(retimeRef !== undefined ? { retime: retimeRef } : {}),
 						},
@@ -179,6 +185,7 @@ export class SplitElementsCommand extends Command {
 							duration: rightVisibleDuration,
 							trimStart: rightTrimStart,
 							name: `${element.name} (right)`,
+							params: fadeParams.right,
 							animations: rightAnimations,
 							...(retimeRef !== undefined ? { retime: retimeRef } : {}),
 						},

@@ -36,9 +36,32 @@ export function collectEditPoints({
 }
 
 /**
- * 找下一個(或上一個)剪輯點;沒有就回傳 null。
- * 播放頭剛好停在剪輯點上時會跳到「再下一個」,連按才會一路往前。
+ * 在一組時間點(不需排序)裡找下一個(或上一個);沒有就回傳 null。
+ * 剛好停在某個點上時會跳到「再下一個」,連按才會一路往前。
  */
+export function findAdjacentTime({
+	points,
+	time,
+	direction,
+}: {
+	points: ReadonlyArray<number>;
+	time: number;
+	direction: "prev" | "next";
+}): number | null {
+	if (direction === "next") {
+		let best: number | null = null;
+		for (const point of points) {
+			if (point > time && (best === null || point < best)) best = point;
+		}
+		return best;
+	}
+	let best: number | null = null;
+	for (const point of points) {
+		if (point < time && (best === null || point > best)) best = point;
+	}
+	return best;
+}
+
 export function findAdjacentEditPoint({
 	tracks,
 	time,
@@ -48,12 +71,26 @@ export function findAdjacentEditPoint({
 	time: number;
 	direction: "prev" | "next";
 }): number | null {
-	const points = collectEditPoints({ tracks });
-	if (direction === "next") {
-		return points.find((point) => point > time) ?? null;
-	}
-	for (let i = points.length - 1; i >= 0; i--) {
-		if (points[i] < time) return points[i];
-	}
-	return null;
+	return findAdjacentTime({
+		points: collectEditPoints({ tracks }),
+		time,
+		direction,
+	});
+}
+
+/** 上一個 / 下一個書籤(書籤不一定排序過,所以不假設順序) */
+export function findAdjacentBookmark({
+	bookmarks,
+	time,
+	direction,
+}: {
+	bookmarks: ReadonlyArray<{ time: number }>;
+	time: number;
+	direction: "prev" | "next";
+}): number | null {
+	return findAdjacentTime({
+		points: bookmarks.map((bookmark) => bookmark.time),
+		time,
+		direction,
+	});
 }

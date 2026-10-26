@@ -2,6 +2,7 @@ import { hasKeyframesForPath } from "@/animation/keyframe-query";
 import { resolveNumberAtTime } from "@/animation/values";
 import { VOLUME_DB_MAX, VOLUME_DB_MIN } from "./audio-constants";
 import type { TimelineElement } from "./types";
+import { audioFadeGain, hasAudioFade } from "./audio-fade";
 const DEFAULT_STEP_SECONDS = 1 / 60;
 
 export type AudioCapableElement = Extract<
@@ -51,6 +52,20 @@ export function hasAnimatedVolume({
 
 import { TICKS_PER_SECOND } from "@/wasm";
 
+/**
+ * 增益會隨時間變化(音量關鍵影格或淡入淡出)。
+ * 預覽與匯出要用這個判斷是否逐點計算增益,只看關鍵影格的話淡化會被忽略。
+ */
+export function hasTimeVaryingGain({
+	element,
+}: {
+	element: AudioCapableElement;
+}): boolean {
+	return (
+		hasAnimatedVolume({ element }) || hasAudioFade({ params: element.params })
+	);
+}
+
 export function resolveEffectiveAudioGain({
 	element,
 	trackMuted = false,
@@ -71,7 +86,14 @@ export function resolveEffectiveAudioGain({
 		localTime: Math.round(localTime * TICKS_PER_SECOND),
 	});
 
-	return dBToLinear(resolvedDb);
+	return (
+		dBToLinear(resolvedDb) *
+		audioFadeGain({
+			params: element.params,
+			durationSeconds: element.duration / TICKS_PER_SECOND,
+			localTime,
+		})
+	);
 }
 
 export function buildWaveformGainSamples({

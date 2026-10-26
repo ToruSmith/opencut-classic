@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { collectEditPoints, findAdjacentEditPoint } from "../edit-points";
+import {
+	collectEditPoints,
+	findAdjacentBookmark,
+	findAdjacentEditPoint,
+} from "../edit-points";
 
 const tracks = {
 	overlay: [{ elements: [{ startTime: 150, duration: 100 }] }],
@@ -40,5 +44,19 @@ describe("findAdjacentEditPoint", () => {
 	test("到底了回傳 null", () => {
 		expect(findAdjacentEditPoint({ tracks, time: 300, direction: "next" })).toBeNull();
 		expect(findAdjacentEditPoint({ tracks, time: 0, direction: "prev" })).toBeNull();
+	});
+});
+
+describe("findAdjacentBookmark", () => {
+	const bookmarks = [{ time: 300 }, { time: 100 }, { time: 200 }];
+
+	test("書籤沒排序也能找到最近的", () => {
+		expect(findAdjacentBookmark({ bookmarks, time: 150, direction: "next" })).toBe(200);
+		expect(findAdjacentBookmark({ bookmarks, time: 150, direction: "prev" })).toBe(100);
+	});
+
+	test("停在書籤上會跳到再下一個;沒有書籤回傳 null", () => {
+		expect(findAdjacentBookmark({ bookmarks, time: 200, direction: "next" })).toBe(300);
+		expect(findAdjacentBookmark({ bookmarks: [], time: 0, direction: "next" })).toBeNull();
 	});
 });

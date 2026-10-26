@@ -6,7 +6,10 @@ import { createAudioContext, collectAudioClips } from "@/media/audio";
 import {
 	buildAudioGainAutomation,
 	hasAnimatedVolume,
+	hasTimeVaryingGain,
+	resolveEffectiveAudioGain,
 } from "@/timeline/audio-state";
+import { hasAudioFade } from "@/timeline/audio-fade";
 import { createAudioMasteringChain } from "@/media/audio-mastering";
 import {
 	getClipTimeAtSourceTime,
@@ -297,6 +300,22 @@ export class AudioManager {
 				this.playbackLatencyCompensationSeconds +
 				(timelineTime - this.playbackStartTime);
 
+			// 淡入淡出:這條路徑是逐段播放,所以每一段各自排一次增益曲線
+			if (hasAudioFade({ params: clip.timelineElement.params })) {
+				const rate = clip.retime
+					? clampRetimeRate({ rate: clip.retime.rate })
+					: 1;
+				const localStart = timelineTime - clip.startTime;
+				this.scheduleBufferGainAutomation({
+					audioContext,
+					clip,
+					clipGain,
+					startTimestamp,
+					localStart,
+					localEnd: localStart + buffer.duration / rate,
+				});
+			}
+
 			if (startTimestamp >= audioContext.currentTime) {
 				node.start(startTimestamp);
 				consecutiveDroppedBufferCount = 0;
@@ -470,6 +489,47 @@ export class AudioManager {
 		);
 	}
 
+	/**
+	 * 對單一段音訊排增益曲線。startTimestamp 是這段「應該」開始的時間,
+	 * 已經過去的部分(晚開始的情況)直接從現在的值接上。
+	 */
+	private scheduleBufferGainAutomation({
+		audioContext,
+		clip,
+		clipGain,
+		startTimestamp,
+		localStart,
+		localEnd,
+	}: {
+		audioContext: AudioContext;
+		clip: AudioClipSource;
+		clipGain: GainNode;
+		startTimestamp: number;
+		localStart: number;
+		localEnd: number;
+	}): void {
+		const element = clip.timelineElement;
+		const beginTimestamp = Math.max(startTimestamp, audioContext.currentTime);
+		const beginLocal = localStart + (beginTimestamp - startTimestamp);
+		clipGain.gain.cancelScheduledValues(beginTimestamp);
+		clipGain.gain.setValueAtTime(
+			resolveEffectiveAudioGain({ element, localTime: beginLocal }),
+			beginTimestamp,
+		);
+		if (beginLocal >= localEnd) return;
+
+		const points = buildAudioGainAutomation({
+			element,
+			fromLocalTime: beginLocal,
+			toLocalTime: localEnd,
+		});
+		for (const point of points) {
+			const pointTimestamp = startTimestamp + (point.localTime - localStart);
+			if (pointTimestamp <= beginTimestamp) continue;
+			clipGain.gain.linearRampToValueAtTime(point.gain, pointTimestamp);
+		}
+	}
+
 	private hasCurveRetime({ clip }: { clip: AudioClipSource }): boolean {
 		const mode = (clip.retime as { mode?: unknown } | undefined)?.mode;
 		return mode === "curve";
@@ -491,7 +551,7 @@ export class AudioManager {
 		clipGain.gain.cancelScheduledValues(startTimestamp);
 		clipGain.gain.setValueAtTime(clip.volume, startTimestamp);
 
-		if (!hasAnimatedVolume({ element: clip.timelineElement })) {
+		if (!hasTimeVaryingGain({ element: clip.timelineElement })) {
 			return;
 		}
 

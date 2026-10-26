@@ -17,7 +17,10 @@ import {
 } from "@/wasm";
 import { useKeyframeSelection } from "@/timeline/hooks/element/use-keyframe-selection";
 import { getElementsAtTime, hasMediaId } from "@/timeline";
-import { findAdjacentEditPoint } from "@/timeline/edit-points";
+import {
+	findAdjacentBookmark,
+	findAdjacentEditPoint,
+} from "@/timeline/edit-points";
 import { cancelInteraction } from "@/editor/cancel-interaction";
 import { invokeAction } from "@/actions";
 import { canToggleSourceAudio } from "@/timeline/audio-separation";
@@ -383,6 +386,34 @@ export function useEditorActions() {
 		() => {
 			const target = findAdjacentEditPoint({
 				tracks: editor.scenes.getActiveScene().tracks,
+				time: editor.playback.getCurrentTime(),
+				direction: "next",
+			});
+			if (target === null) return;
+			editor.playback.seek({ time: mediaTime({ ticks: target }) });
+		},
+		undefined,
+	);
+
+	useActionHandler(
+		"goto-prev-bookmark",
+		() => {
+			const target = findAdjacentBookmark({
+				bookmarks: editor.scenes.getActiveScene().bookmarks,
+				time: editor.playback.getCurrentTime(),
+				direction: "prev",
+			});
+			if (target === null) return;
+			editor.playback.seek({ time: mediaTime({ ticks: target }) });
+		},
+		undefined,
+	);
+
+	useActionHandler(
+		"goto-next-bookmark",
+		() => {
+			const target = findAdjacentBookmark({
+				bookmarks: editor.scenes.getActiveScene().bookmarks,
 				time: editor.playback.getCurrentTime(),
 				direction: "next",
 			});

@@ -93,7 +93,8 @@ export function AudioVolumeLine({
 					{
 						trackId,
 						elementId: element.id,
-						updates: { params: { volume: nextVolume } },
+						// params 是整包取代,要帶上原本的其他參數(靜音、淡入淡出…)
+						updates: { params: { ...element.params, volume: nextVolume } },
 					},
 				],
 			});
@@ -103,7 +104,7 @@ export function AudioVolumeLine({
 				rightValue: nextVolume,
 			});
 		},
-		[editor, element.id, trackId],
+		[editor, element.id, element.params, trackId],
 	);
 
 	const finishDrag = useCallback(

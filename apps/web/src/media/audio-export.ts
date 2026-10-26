@@ -15,7 +15,7 @@ import {
 	shouldMaintainPitch,
 } from "@/retime";
 import {
-	hasAnimatedVolume,
+	hasTimeVaryingGain,
 	isElementMuted,
 	resolveEffectiveAudioGain,
 	type AudioCapableElement,
@@ -265,7 +265,7 @@ function planClips({
 			trackMuted: false,
 			localTime: 0,
 		});
-		const animated = hasAnimatedVolume({ element });
+		const animated = hasTimeVaryingGain({ element });
 
 		clips.push({
 			key,
