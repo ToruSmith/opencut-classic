@@ -47,6 +47,8 @@ import {
 	Edit03Icon,
 	ArrowDown02Icon,
 	InformationCircleIcon,
+	RotateClockwiseIcon,
+	Alert02Icon,
 } from "@hugeicons/core-free-icons";
 import { OcVideoIcon } from "@/components/icons";
 import { Label } from "@/components/ui/label";
@@ -67,6 +69,8 @@ import {
 import { DeleteProjectDialog } from "@/project/components/delete-project-dialog";
 import { ProjectInfoDialog } from "@/project/components/project-info-dialog";
 import { RenameProjectDialog } from "@/project/components/rename-project-dialog";
+import { ProjectSnapshotsDialog } from "@/project/components/project-snapshots-dialog";
+import { needsBackupReminder } from "@/services/storage/snapshot-policy";
 import { cn } from "@/utils/ui";
 const formatProjectDuration = ({
 	duration,
@@ -195,10 +199,10 @@ function ProjectsHeader() {
 }
 
 const SORT_LABELS: Record<TProjectSortKey, string> = {
-	createdAt: "Created",
-	updatedAt: "Modified",
-	name: "Name",
-	duration: "Duration",
+	createdAt: "建立時間",
+	updatedAt: "修改時間",
+	name: "名稱",
+	duration: "長度",
 };
 
 function ProjectsToolbar({ projectIds }: { projectIds: string[] }) {
@@ -629,7 +633,15 @@ function ProjectItem({
 	const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
 	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 	const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
+	const [isSnapshotsDialogOpen, setIsSnapshotsDialogOpen] = useState(false);
 	const editor = useEditor();
+	const lastBackupAt = editor.project.getLastBackupAt({ id: project.id });
+	const showBackupReminder = needsBackupReminder({
+		lastBackupAt,
+		createdAt: project.createdAt.getTime(),
+		updatedAt: project.updatedAt.getTime(),
+		now: Date.now(),
+	});
 	const durationLabel = formatProjectDuration({ duration: project.duration });
 	const isMultiSelect = selectedProjectCount > 1;
 	const isGridView = viewMode === "grid";
@@ -640,6 +652,20 @@ function ProjectItem({
 	};
 	const handleDeleteClick = () => setIsDeleteDialogOpen(true);
 	const handleInfoClick = () => setIsInfoDialogOpen(true);
+	const handleSnapshotsClick = () => setIsSnapshotsDialogOpen(true);
+	const handleBackupClick = async () => {
+		try {
+			const saved = await editor.project.exportBackup({
+				id: project.id,
+				name: project.name,
+			});
+			if (saved) toast.success("備份已匯出");
+		} catch (error) {
+			toast.error("匯出備份失敗", {
+				description: error instanceof Error ? error.message : undefined,
+			});
+		}
+	};
 	const handleDeleteConfirm = async () => {
 		await deleteProjects({ editor, ids: [project.id] });
 		setIsDeleteDialogOpen(false);
@@ -690,8 +716,9 @@ function ProjectItem({
 				</h3>
 				<div className="text-muted-foreground flex items-center gap-1.5 text-sm">
 					<HugeiconsIcon icon={Calendar04Icon} className="size-4" />
-					<span>Created {formatDate({ date: project.createdAt })}</span>
+					<span>建立於 {formatDate({ date: project.createdAt })}</span>
 				</div>
+				{showBackupReminder && <BackupReminder lastBackupAt={lastBackupAt} />}
 			</CardContent>
 		</Card>
 	);
@@ -716,6 +743,12 @@ function ProjectItem({
 			<h3 className="group-hover:text-foreground/90 text-sm font-medium truncate flex-1 min-w-0">
 				{project.name}
 			</h3>
+
+			{showBackupReminder && (
+				<span className="hidden md:block">
+					<BackupReminder lastBackupAt={lastBackupAt} />
+				</span>
+			)}
 
 			<span className="text-muted-foreground text-sm shrink-0 hidden sm:block">
 				{durationLabel ?? "—"}
@@ -759,6 +792,8 @@ function ProjectItem({
 					onDuplicateClick={handleDuplicate}
 					onDeleteClick={handleDeleteClick}
 					onInfoClick={handleInfoClick}
+					onSnapshotsClick={handleSnapshotsClick}
+					onBackupClick={handleBackupClick}
 				/>
 			)}
 		</div>
@@ -800,6 +835,8 @@ function ProjectItem({
 										onDuplicateClick={handleDuplicate}
 										onDeleteClick={handleDeleteClick}
 										onInfoClick={handleInfoClick}
+										onSnapshotsClick={handleSnapshotsClick}
+										onBackupClick={handleBackupClick}
 									/>
 								)}
 							</>
@@ -813,6 +850,8 @@ function ProjectItem({
 					onDuplicateClick={handleDuplicate}
 					onDeleteClick={handleDeleteClick}
 					onInfoClick={handleInfoClick}
+					onSnapshotsClick={handleSnapshotsClick}
+					onBackupClick={handleBackupClick}
 				/>
 			</ContextMenu>
 
@@ -838,7 +877,30 @@ function ProjectItem({
 				onOpenChange={setIsInfoDialogOpen}
 				project={project}
 			/>
+
+			<ProjectSnapshotsDialog
+				isOpen={isSnapshotsDialogOpen}
+				onOpenChange={setIsSnapshotsDialogOpen}
+				projectId={project.id}
+				projectName={project.name}
+			/>
 		</>
+	);
+}
+
+function BackupReminder({ lastBackupAt }: { lastBackupAt: number | null }) {
+	return (
+		<div
+			className="text-caution flex items-center gap-1.5 text-xs"
+			title="專案只存在這個瀏覽器裡,清除瀏覽器資料就會消失。請用「匯出備份」另存一份。"
+		>
+			<HugeiconsIcon icon={Alert02Icon} className="size-3.5" />
+			<span>
+				{lastBackupAt === null
+					? "尚未備份"
+					: `上次備份 ${formatDate({ date: new Date(lastBackupAt) })}`}
+			</span>
+		</div>
 	);
 }
 
@@ -847,11 +909,15 @@ function ProjectContextMenuContent({
 	onDuplicateClick,
 	onDeleteClick,
 	onInfoClick,
+	onSnapshotsClick,
+	onBackupClick,
 }: {
 	onRenameClick: () => void;
 	onDuplicateClick: () => void;
 	onDeleteClick: () => void;
 	onInfoClick: () => void;
+	onSnapshotsClick: () => void;
+	onBackupClick: () => void;
 }) {
 	return (
 		<ContextMenuContent>
@@ -868,10 +934,22 @@ function ProjectContextMenuContent({
 				複製
 			</ContextMenuItem>
 			<ContextMenuItem
+				icon={<HugeiconsIcon icon={Download01Icon} />}
+				onClick={onBackupClick}
+			>
+				匯出備份
+			</ContextMenuItem>
+			<ContextMenuItem
+				icon={<HugeiconsIcon icon={RotateClockwiseIcon} />}
+				onClick={onSnapshotsClick}
+			>
+				版本紀錄
+			</ContextMenuItem>
+			<ContextMenuItem
 				icon={<HugeiconsIcon icon={InformationCircleIcon} />}
 				onClick={onInfoClick}
 			>
-				Info
+				資訊
 			</ContextMenuItem>
 			<ContextMenuSeparator />
 			<ContextMenuItem
@@ -893,6 +971,8 @@ function ProjectMenu({
 	onDuplicateClick,
 	onDeleteClick,
 	onInfoClick,
+	onSnapshotsClick,
+	onBackupClick,
 }: {
 	isOpen: boolean;
 	onOpenChange: (open: boolean) => void;
@@ -901,6 +981,8 @@ function ProjectMenu({
 	onDuplicateClick: () => void;
 	onDeleteClick: () => void;
 	onInfoClick: () => void;
+	onSnapshotsClick: () => void;
+	onBackupClick: () => void;
 }) {
 	const handleMenuClick = ({
 		event,
@@ -940,6 +1022,16 @@ function ProjectMenu({
 
 	const handleInfoClick = () => {
 		onInfoClick();
+		onOpenChange(false);
+	};
+
+	const handleSnapshotsClick = () => {
+		onSnapshotsClick();
+		onOpenChange(false);
+	};
+
+	const handleBackupClick = () => {
+		onBackupClick();
 		onOpenChange(false);
 	};
 
@@ -985,9 +1077,17 @@ function ProjectMenu({
 					<HugeiconsIcon icon={Copy01Icon} />
 					複製
 				</DropdownMenuItem>
+				<DropdownMenuItem onClick={handleBackupClick}>
+					<HugeiconsIcon icon={Download01Icon} />
+					匯出備份
+				</DropdownMenuItem>
+				<DropdownMenuItem onClick={handleSnapshotsClick}>
+					<HugeiconsIcon icon={RotateClockwiseIcon} />
+					版本紀錄
+				</DropdownMenuItem>
 				<DropdownMenuItem onClick={handleInfoClick}>
 					<HugeiconsIcon icon={InformationCircleIcon} />
-					Info
+					資訊
 				</DropdownMenuItem>
 				<DropdownMenuItem variant="destructive" onClick={handleDeleteClick}>
 					<HugeiconsIcon icon={Delete02Icon} />

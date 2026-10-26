@@ -37,6 +37,30 @@ export interface MigrationState {
 	projectName: string | null;
 }
 
+const BACKUP_TIMES_KEY = "opencut-last-backup";
+
+function readBackupTimes(): Record<string, number> {
+	try {
+		const raw = localStorage.getItem(BACKUP_TIMES_KEY);
+		const parsed: unknown = raw ? JSON.parse(raw) : {};
+		return typeof parsed === "object" && parsed !== null
+			? (parsed as Record<string, number>)
+			: {};
+	} catch {
+		return {};
+	}
+}
+
+function recordBackupTime({ id }: { id: string }): void {
+	try {
+		const times = readBackupTimes();
+		times[id] = Date.now();
+		localStorage.setItem(BACKUP_TIMES_KEY, JSON.stringify(times));
+	} catch {
+		// 無痕模式等情況下 localStorage 可能無法寫入,只是少了提醒,不影響備份本身
+	}
+}
+
 export class ProjectManager {
 	private active: TProject | null = null;
 	private savedProjects: TProjectMetadata[] = [];
@@ -204,6 +228,10 @@ export class ProjectManager {
 			await storageService.saveProject({ project: updatedProject });
 			this.active = updatedProject;
 			this.updateMetadata(updatedProject);
+			// 版本快照:內容有變且距離上一份超過 10 分鐘才會真的存;失敗不影響存檔
+			void storageService
+				.snapshotProject({ projectId: updatedProject.metadata.id })
+				.catch((error) => console.warn("版本快照失敗", error));
 		} catch (error) {
 			console.error("Failed to save project:", error);
 		}
@@ -233,8 +261,38 @@ export class ProjectManager {
 		return result;
 	}
 
-	/** 匯出專案備份檔(含專案內容與所有素材) */
-	async exportBackup({ id, name }: { id: string; name: string }): Promise<void> {
+	/** 上次成功匯出備份的時間(ms);沒備份過是 null */
+	getLastBackupAt({ id }: { id: string }): number | null {
+		const value = readBackupTimes()[id];
+		return typeof value === "number" && Number.isFinite(value) ? value : null;
+	}
+
+	/** 列出專案的版本快照(新的在前) */
+	async listSnapshots({ id }: { id: string }) {
+		return storageService.listProjectSnapshots({ projectId: id });
+	}
+
+	/** 還原到某個版本(從專案列表呼叫) */
+	async restoreSnapshot({
+		projectId,
+		snapshotId,
+	}: {
+		projectId: string;
+		snapshotId: string;
+	}): Promise<void> {
+		// 從編輯器用瀏覽器「上一頁」回來時,專案可能還掛在記憶體裡。
+		// 先把待存的變更寫完再關閉,免得之後的自動存檔蓋掉還原結果。
+		if (this.active?.metadata.id === projectId) {
+			await this.editor.save.flush();
+			this.closeProject();
+		}
+		await storageService.restoreProjectSnapshot({ snapshotId });
+		this.savedProjects = await storageService.loadAllProjectsMetadata();
+		this.notify();
+	}
+
+	/** 匯出專案備份檔(含專案內容與所有素材);使用者取消時回傳 false */
+	async exportBackup({ id, name }: { id: string; name: string }): Promise<boolean> {
 		if (this.active?.metadata.id === id) {
 			await this.saveCurrentProject();
 		}
@@ -251,9 +309,13 @@ export class ProjectManager {
 				const writable = await handle.createWritable();
 				await writable.write(blob);
 				await writable.close();
-				return;
+				recordBackupTime({ id });
+				this.notify();
+				return true;
 			} catch (error) {
-				if (error instanceof DOMException && error.name === "AbortError") return;
+				if (error instanceof DOMException && error.name === "AbortError") {
+					return false;
+				}
 				console.warn("直接寫檔失敗,改用一般下載", error);
 			}
 		}
@@ -263,6 +325,10 @@ export class ProjectManager {
 		anchor.download = filename;
 		anchor.click();
 		setTimeout(() => URL.revokeObjectURL(url), 60_000);
+		// 一般下載無法得知使用者是否真的存檔,按下就當作已備份
+		recordBackupTime({ id });
+		this.notify();
+		return true;
 	}
 
 	/** 從備份檔建立新專案,回傳新專案 ID */

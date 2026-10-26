@@ -8,8 +8,6 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 
 export function DeleteProjectDialog({
 	isOpen,
@@ -38,14 +36,14 @@ export function DeleteProjectDialog({
 					<DialogTitle>
 						{singleName ? (
 							<>
-								{"Delete '"}
+								{"刪除「"}
 								<span className="inline-block max-w-[300px] truncate align-bottom">
 									{singleName}
 								</span>
-								{"'?"}
+								{"」?"}
 							</>
 						) : (
-							`Delete ${count} projects?`
+							`刪除 ${count} 個專案?`
 						)}
 					</DialogTitle>
 				</DialogHeader>
@@ -53,22 +51,10 @@ export function DeleteProjectDialog({
 					<Alert variant="destructive">
 						<AlertTitle>警告</AlertTitle>
 						<AlertDescription>
-							This will permanently delete{" "}
-							{singleName ? `"${singleName}"` : `${count} projects`} and all
-							associated files.
+							會永久刪除{singleName ? `「${singleName}」` : ` ${count} 個專案`}
+							與其中所有素材檔、版本紀錄,無法復原。需要的話請先「匯出備份」。
 						</AlertDescription>
 					</Alert>
-					<div className="flex flex-col gap-3">
-						<Label className="text-xs font-semibold text-slate-500">
-							Type "DELETE" to confirm
-						</Label>
-						<Input
-							type="text"
-							placeholder="DELETE"
-							size="lg"
-							variant="destructive"
-						/>
-					</div>
 				</DialogBody>
 				<DialogFooter>
 					<Button variant="outline" onClick={() => onOpenChange(false)}>

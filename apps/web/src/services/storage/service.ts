@@ -23,6 +23,39 @@ import {
 } from "@/services/storage/migrations";
 import type { Bookmark, SceneTracks, TScene } from "@/timeline";
 import { roundMediaTime } from "@/wasm";
+import {
+	type SnapshotInfo,
+	shouldTakeSnapshot,
+	snapshotId,
+	snapshotsToPrune,
+} from "./snapshot-policy";
+
+interface ProjectSnapshotRecord {
+	projectId: string;
+	createdAt: number;
+	/** 只含會影響內容的部分,用來判斷「內容有沒有變」 */
+	content: string;
+	project: SerializedProject;
+}
+
+export type ProjectSnapshotSummary = SnapshotInfo;
+
+/** 比較內容時忽略修改時間、縮圖、時間軸捲動位置這類不算「內容」的欄位 */
+function snapshotContent({ project }: { project: SerializedProject }): string {
+	return JSON.stringify({
+		scenes: project.scenes,
+		settings: project.settings,
+		currentSceneId: project.currentSceneId,
+	});
+}
+
+function parseSnapshotId({ id }: { id: string }): SnapshotInfo | null {
+	const separator = id.lastIndexOf(":");
+	if (separator <= 0) return null;
+	const createdAt = Number(id.slice(separator + 1));
+	if (!Number.isFinite(createdAt)) return null;
+	return { id, projectId: id.slice(0, separator), createdAt };
+}
 
 function normalizeBookmarks({ raw }: { raw: unknown }): Bookmark[] {
 	if (!Array.isArray(raw)) return [];
@@ -54,6 +87,13 @@ function normalizeBookmarks({ raw }: { raw: unknown }): Bookmark[] {
 class StorageService {
 	private projectsAdapter: IndexedDBAdapter<SerializedProject>;
 	private savedSoundsAdapter: IndexedDBAdapter<SavedSoundsData>;
+	private snapshotsAdapter = new IndexedDBAdapter<ProjectSnapshotRecord>({
+		dbName: "video-editor-snapshots",
+		storeName: "snapshots",
+		version: 1,
+	});
+	/** 每個專案最近一份快照(避免每次存檔都去讀資料庫) */
+	private latestSnapshots = new Map<string, { createdAt: number; content: string }>();
 	private config: StorageConfig;
 	private migrationsPromise: Promise<void> | null = null;
 
@@ -282,6 +322,126 @@ class StorageService {
 
 	async deleteProject({ id }: { id: string }): Promise<void> {
 		await this.projectsAdapter.remove(id);
+		await this.deleteProjectSnapshots({ projectId: id }).catch((error) => {
+			console.warn("刪除版本快照失敗", error);
+		});
+	}
+
+	/** 列出某專案的快照(新的在前),只讀 key,不載入內容 */
+	async listProjectSnapshots({
+		projectId,
+	}: {
+		projectId: string;
+	}): Promise<ProjectSnapshotSummary[]> {
+		const ids = await this.snapshotsAdapter.list();
+		return ids
+			.map((id) => parseSnapshotId({ id: String(id) }))
+			.filter(
+				(info): info is SnapshotInfo =>
+					info !== null && info.projectId === projectId,
+			)
+			.sort((a, b) => b.createdAt - a.createdAt);
+	}
+
+	/**
+	 * 存檔後呼叫:內容有變且距離上一份夠久,才存一份新快照。
+	 * force 用在「還原前先保存目前狀態」,不受時間間隔限制。
+	 */
+	async snapshotProject({
+		projectId,
+		force = false,
+	}: {
+		projectId: string;
+		force?: boolean;
+	}): Promise<void> {
+		const project = await this.projectsAdapter.get(projectId);
+		if (!project || typeof project !== "object" || !project.metadata) return;
+		const content = snapshotContent({ project });
+
+		let latest = this.latestSnapshots.get(projectId) ?? null;
+		if (!latest) {
+			const [newest] = await this.listProjectSnapshots({ projectId });
+			if (newest) {
+				const record = await this.snapshotsAdapter.get(newest.id);
+				if (record) {
+					latest = { createdAt: newest.createdAt, content: record.content };
+				}
+			}
+		}
+
+		const now = Date.now();
+		const shouldTake = force
+			? latest?.content !== content
+			: shouldTakeSnapshot({
+					lastSnapshotAt: latest?.createdAt ?? null,
+					now,
+					lastContent: latest?.content ?? null,
+					content,
+				});
+		if (!shouldTake) return;
+
+		await this.snapshotsAdapter.set({
+			key: snapshotId({ projectId, createdAt: now }),
+			value: { projectId, createdAt: now, content, project },
+		});
+		this.latestSnapshots.set(projectId, { createdAt: now, content });
+
+		const snapshots = await this.listProjectSnapshots({ projectId });
+		for (const old of snapshotsToPrune({ snapshots })) {
+			await this.snapshotsAdapter.remove(old.id);
+		}
+	}
+
+	/**
+	 * 把專案內容還原成某份快照。還原前會先把目前狀態存成快照,所以還原本身也能再還原回去。
+	 * 素材不在快照裡:快照之後刪掉的素材,還原後會顯示為缺少的素材。
+	 * 專案不能正開在編輯器裡(呼叫端負責)。
+	 */
+	async restoreProjectSnapshot({
+		snapshotId: id,
+	}: {
+		snapshotId: string;
+	}): Promise<void> {
+		const record = await this.snapshotsAdapter.get(id);
+		if (!record) throw new Error("找不到這個版本");
+		const current = await this.projectsAdapter.get(record.projectId);
+		if (!current) throw new Error("找不到專案");
+
+		await this.snapshotProject({ projectId: record.projectId, force: true });
+
+		const { id: _storedId, ...snapshotProject } = record.project as SerializedProject & {
+			id?: string;
+		};
+		await this.projectsAdapter.set({
+			key: record.projectId,
+			value: {
+				...snapshotProject,
+				metadata: {
+					...snapshotProject.metadata,
+					id: record.projectId,
+					// 名稱沿用目前的(使用者可能在快照之後改過名)
+					name: current.metadata.name,
+					updatedAt: new Date().toISOString(),
+				},
+			},
+		});
+		this.latestSnapshots.delete(record.projectId);
+
+		// 快照可能是舊版格式:重跑一次遷移,讓它馬上升級到目前版本
+		this.migrationsPromise = null;
+		await this.ensureMigrations();
+	}
+
+	private async deleteProjectSnapshots({
+		projectId,
+	}: {
+		projectId: string;
+	}): Promise<void> {
+		const snapshots = await this.listProjectSnapshots({ projectId });
+		for (const snapshot of snapshots) {
+			await this.snapshotsAdapter.remove(snapshot.id);
+		}
+		this.latestSnapshots.delete(projectId);
 	}
 
 	async saveMediaAsset({
@@ -435,6 +595,8 @@ class StorageService {
 
 	async clearAllData(): Promise<void> {
 		await this.projectsAdapter.clear();
+		await this.snapshotsAdapter.clear().catch(() => {});
+		this.latestSnapshots.clear();
 		// project-specific media and timelines cleaned up when projects are deleted
 	}
 
