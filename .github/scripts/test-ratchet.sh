@@ -24,6 +24,8 @@ setup_msgs="$(grep -A6 '\[test-setup\]' "$clean" | head -c 3000)"
 [ -n "$setup_msgs" ] && echo "::warning title=test-setup 警告::$(enc "$setup_msgs")"
 err_msgs="$(grep -E '^(error|[A-Za-z]*Error):|^\s+(error|TypeError|ReferenceError)' "$clean" | sed -E 's/^\s+//' | LC_ALL=C sort | uniq -c | sort -rn | head -12 | head -c 3000)"
 [ -n "$err_msgs" ] && echo "::notice title=test-errors::$(enc "$err_msgs")"
+detail="$(grep -B3 -A14 -E '^error: (expect|mediaTime)' "$clean" | head -c 6000)"
+[ -n "$detail" ] && echo "::notice title=test-details::$(enc "$detail")"
 
 if [ ! -f "$baseline" ]; then
   echo "::notice title=failing-tests (${count})::$(enc "$(head -c 50000 "$failing")")"
