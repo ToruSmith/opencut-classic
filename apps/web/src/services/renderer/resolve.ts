@@ -184,6 +184,27 @@ function resolveVisualState({
 	};
 }
 
+/**
+ * 預覽時有代理檔就讀代理檔(解碼器另外開一份,快取 key 加上 @proxy,
+ * 刪除素材時 videoCache.clearVideo 會一起清掉);匯出與快照一律讀原始檔。
+ */
+function pickVideoSource({
+	mediaId,
+	file,
+	proxyFile,
+	isPreview,
+}: {
+	mediaId: string;
+	file: File;
+	proxyFile?: File;
+	isPreview: boolean;
+}): { mediaId: string; file: File } {
+	if (isPreview && proxyFile) {
+		return { mediaId: `${mediaId}@proxy`, file: proxyFile };
+	}
+	return { mediaId, file };
+}
+
 async function resolveVideoNode({
 	node,
 	context,
@@ -202,11 +223,16 @@ async function resolveVideoNode({
 			clipTime,
 			retime: node.params.retime,
 		});
+	const maxSize = context.renderer.getVideoDecodeLimit();
 	const frame = await videoCache.getFrameAt({
-		mediaId: node.params.mediaId,
-		file: node.params.file,
+		...pickVideoSource({
+			mediaId: node.params.mediaId,
+			file: node.params.file,
+			proxyFile: node.params.proxyFile,
+			isPreview: maxSize !== undefined,
+		}),
 		time: mediaTimeToSeconds({ time: roundMediaTime({ time: sourceTimeTicks }) }),
-		maxSize: context.renderer.getVideoDecodeLimit(),
+		maxSize,
 	});
 	if (!frame) {
 		return null;
@@ -431,8 +457,12 @@ async function resolveBackdropSource({
 				retime: node.params.retime,
 			});
 		const frame = await videoCache.getFrameAt({
-			mediaId: node.params.mediaId,
-			file: node.params.file,
+			...pickVideoSource({
+				mediaId: node.params.mediaId,
+				file: node.params.file,
+				proxyFile: node.params.proxyFile,
+				isPreview: maxSize !== undefined,
+			}),
 			time: mediaTimeToSeconds({ time: roundMediaTime({ time: sourceTimeTicks }) }),
 			maxSize,
 		});

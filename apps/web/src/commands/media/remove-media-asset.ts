@@ -91,8 +91,10 @@ export class RemoveMediaAssetCommand extends Command {
 		const editor = EditorCore.getInstance();
 
 		if (this.savedAssets && this.removedAsset) {
+			// 代理檔在刪除時已從儲存空間移除,復原後不再使用(需要的話重新建立)
+			const { proxyFile: _proxyFile, ...removedWithoutProxy } = this.removedAsset;
 			const restoredAsset: MediaAsset = {
-				...this.removedAsset,
+				...removedWithoutProxy,
 				url: URL.createObjectURL(this.removedAsset.file),
 			};
 

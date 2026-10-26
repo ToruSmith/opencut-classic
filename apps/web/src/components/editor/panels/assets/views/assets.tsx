@@ -315,16 +315,46 @@ function MediaItemWithContextMenu({
 		ids: string[];
 	}) => void;
 }) {
+	const editor = useEditor();
+	const activeProject = useEditor((e) => e.project.getActive());
+	const proxyProgress = useEditor((e) => e.media.getProxyProgress({ id: item.id }));
 	const { isSelected, selectedIds } = useSelection();
 	const idsToDelete = isSelected(item.id) ? selectedIds : [item.id];
 	const deleteLabel =
-		idsToDelete.length > 1 ? `Delete ${idsToDelete.length} items` : "Delete";
+		idsToDelete.length > 1 ? `刪除 ${idsToDelete.length} 個素材` : "刪除";
+	const projectId = activeProject?.metadata.id;
 
 	return (
 		<ContextMenu>
 			<ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
 			<ContextMenuContent>
-				<ContextMenuItem>匯出片段</ContextMenuItem>
+				{item.type === "video" && projectId && (
+					<>
+						{proxyProgress !== null ? (
+							<ContextMenuItem
+								onClick={() => editor.media.cancelProxy({ id: item.id })}
+							>
+								取消建立代理檔({Math.round(proxyProgress * 100)}%)
+							</ContextMenuItem>
+						) : item.proxyFile ? (
+							<ContextMenuItem
+								onClick={() =>
+									void editor.media.removeProxy({ projectId, id: item.id })
+								}
+							>
+								刪除代理檔(預覽改回原始檔)
+							</ContextMenuItem>
+						) : (
+							<ContextMenuItem
+								onClick={() =>
+									void editor.media.createProxy({ projectId, id: item.id })
+								}
+							>
+								建立代理檔(加快預覽)
+							</ContextMenuItem>
+						)}
+					</>
+				)}
 				<ContextMenuItem
 					variant="destructive"
 					onClick={(event: React.MouseEvent<HTMLDivElement>) =>
@@ -387,6 +417,24 @@ function formatDuration({ duration }: { duration: number }) {
 	const min = Math.floor(duration / 60);
 	const sec = Math.floor(duration % 60);
 	return `${min}:${sec.toString().padStart(2, "0")}`;
+}
+
+/** 影片縮圖左下角:代理檔狀態(建立中顯示進度) */
+function ProxyBadge({ item }: { item: MediaAsset }) {
+	const progress = useEditor((e) => e.media.getProxyProgress({ id: item.id }));
+	if (progress === null && !item.proxyFile) return null;
+	return (
+		<div
+			className="absolute left-1 bottom-1 rounded bg-black/70 px-1 text-[10px] text-white"
+			title={
+				progress !== null
+					? "正在建立預覽用代理檔"
+					: "預覽使用低解析度代理檔,匯出仍用原始檔"
+			}
+		>
+			{progress !== null ? `代理 ${Math.round(progress * 100)}%` : "代理"}
+		</div>
+	);
 }
 
 function MediaDurationBadge({ duration }: { duration?: number }) {
@@ -473,6 +521,7 @@ function MediaPreview({
 					{shouldShowDurationBadge ? (
 						<MediaDurationBadge duration={item.duration} />
 					) : null}
+					<ProxyBadge item={item} />
 				</div>
 			);
 		}

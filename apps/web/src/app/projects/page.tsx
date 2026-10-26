@@ -634,6 +634,8 @@ function ProjectItem({
 	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 	const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
 	const [isSnapshotsDialogOpen, setIsSnapshotsDialogOpen] = useState(false);
+	// 匯出備份後重新算一次提醒(備份時間存在 localStorage,不會自動觸發重繪)
+	const [, setBackupTick] = useState(0);
 	const editor = useEditor();
 	const lastBackupAt = editor.project.getLastBackupAt({ id: project.id });
 	const showBackupReminder = needsBackupReminder({
@@ -659,7 +661,10 @@ function ProjectItem({
 				id: project.id,
 				name: project.name,
 			});
-			if (saved) toast.success("備份已匯出");
+			if (saved) {
+				toast.success("備份已匯出");
+				setBackupTick((tick) => tick + 1);
+			}
 		} catch (error) {
 			toast.error("匯出備份失敗", {
 				description: error instanceof Error ? error.message : undefined,

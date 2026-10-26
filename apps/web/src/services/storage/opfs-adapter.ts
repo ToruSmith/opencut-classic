@@ -42,6 +42,14 @@ export class OPFSAdapter implements StorageAdapter<File> {
 		await writable.close();
 	}
 
+	/** 直接串流寫入檔案;瀏覽器不支援 createWritable(舊版 Safari)時回傳 null */
+	async createWritable(key: string): Promise<FileSystemWritableFileStream | null> {
+		const directory = await this.getDirectory();
+		const fileHandle = await directory.getFileHandle(key, { create: true });
+		if (typeof fileHandle.createWritable !== "function") return null;
+		return await fileHandle.createWritable();
+	}
+
 	async remove(key: string): Promise<void> {
 		try {
 			const directory = await this.getDirectory();

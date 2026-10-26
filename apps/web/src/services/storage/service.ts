@@ -138,8 +138,9 @@ class StorageService {
 		});
 
 		const mediaAssetsAdapter = new OPFSAdapter(`media-files-${projectId}`);
+		const mediaProxiesAdapter = new OPFSAdapter(`media-proxies-${projectId}`);
 
-		return { mediaMetadataAdapter, mediaAssetsAdapter };
+		return { mediaMetadataAdapter, mediaAssetsAdapter, mediaProxiesAdapter };
 	}
 
 	async canStoreFile({
@@ -510,6 +511,13 @@ class StorageService {
 
 		if (!file || !metadata) return null;
 
+		const proxyFile =
+			metadata.type === "video"
+				? await this.getProjectMediaAdapters({ projectId })
+						.mediaProxiesAdapter.get(id)
+						.catch(() => null)
+				: null;
+
 		let url: string;
 		if (metadata.type === "image" && (!file.type || file.type === "")) {
 			try {
@@ -538,7 +546,55 @@ class StorageService {
 			duration: metadata.duration,
 			thumbnailUrl: metadata.thumbnailUrl,
 			ephemeral: metadata.ephemeral,
+			...(proxyFile && proxyFile.size > 0 ? { proxyFile } : {}),
 		};
+	}
+
+	/** 開一個寫入代理檔的串流;不支援時回傳 null(改用 saveMediaProxy 一次寫入) */
+	async openMediaProxyWritable({
+		projectId,
+		id,
+	}: {
+		projectId: string;
+		id: string;
+	}): Promise<FileSystemWritableFileStream | null> {
+		const { mediaProxiesAdapter } = this.getProjectMediaAdapters({ projectId });
+		return mediaProxiesAdapter.createWritable(id);
+	}
+
+	async saveMediaProxy({
+		projectId,
+		id,
+		file,
+	}: {
+		projectId: string;
+		id: string;
+		file: File;
+	}): Promise<void> {
+		const { mediaProxiesAdapter } = this.getProjectMediaAdapters({ projectId });
+		await mediaProxiesAdapter.set({ key: id, value: file });
+	}
+
+	async loadMediaProxy({
+		projectId,
+		id,
+	}: {
+		projectId: string;
+		id: string;
+	}): Promise<File | null> {
+		const { mediaProxiesAdapter } = this.getProjectMediaAdapters({ projectId });
+		return mediaProxiesAdapter.get(id);
+	}
+
+	async deleteMediaProxy({
+		projectId,
+		id,
+	}: {
+		projectId: string;
+		id: string;
+	}): Promise<void> {
+		const { mediaProxiesAdapter } = this.getProjectMediaAdapters({ projectId });
+		await mediaProxiesAdapter.remove(id);
 	}
 
 	async loadAllMediaAssets({
@@ -577,6 +633,7 @@ class StorageService {
 			mediaAssetsAdapter.remove(id),
 			mediaMetadataAdapter.remove(id),
 		]);
+		await this.deleteMediaProxy({ projectId, id }).catch(() => {});
 	}
 
 	async deleteProjectMedia({
@@ -591,6 +648,9 @@ class StorageService {
 			mediaMetadataAdapter.clear(),
 			mediaAssetsAdapter.clear(),
 		]);
+		await this.getProjectMediaAdapters({ projectId })
+			.mediaProxiesAdapter.clear()
+			.catch(() => {});
 	}
 
 	async clearAllData(): Promise<void> {
