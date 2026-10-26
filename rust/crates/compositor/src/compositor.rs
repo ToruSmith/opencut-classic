@@ -458,6 +458,11 @@ impl Compositor {
             })?;
             let mask_source_texture = mask_source.texture().clone();
             let mask_texture = if mask.feather > 0.0 {
+                // 羽化的 JFA 每次要 5 張全畫面貼圖,向本格的貼圖池借
+                let texture_pool = &mut self.texture_pool;
+                let mut acquire = |width: u32, height: u32| {
+                    texture_pool.acquire(context, width, height, "masks-feather-texture")
+                };
                 self.masks.apply_mask_feather_with_encoder(
                     context,
                     encoder,
@@ -467,6 +472,7 @@ impl Compositor {
                         height: frame.height,
                         feather: mask.feather,
                     },
+                    &mut acquire,
                 )
             } else {
                 self.copy_texture(

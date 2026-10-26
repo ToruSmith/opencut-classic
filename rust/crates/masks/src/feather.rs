@@ -2,7 +2,7 @@ use bytemuck::{Pod, Zeroable};
 use gpu::{FULLSCREEN_SHADER_SOURCE, GpuContext};
 use wgpu::util::DeviceExt;
 
-use crate::SdfPipeline;
+use crate::{AcquireTexture, SdfPipeline};
 
 const JFA_DISTANCE_SHADER_SOURCE: &str = include_str!("shaders/jfa_distance.wgsl");
 
@@ -166,6 +166,9 @@ impl MaskFeatherPipeline {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("gpu-mask-distance-command-encoder"),
                 });
+        let mut acquire = |width: u32, height: u32| {
+            context.create_render_texture(width, height, "masks-feather-texture")
+        };
         let output = self.apply_mask_feather_with_encoder(
             context,
             &mut encoder,
@@ -175,6 +178,7 @@ impl MaskFeatherPipeline {
                 height,
                 feather,
             },
+            &mut acquire,
         );
         context.queue().submit([encoder.finish()]);
         output
@@ -190,11 +194,12 @@ impl MaskFeatherPipeline {
             height,
             feather,
         }: ApplyMaskFeatherOptions<'_>,
+        acquire: &mut AcquireTexture<'_>,
     ) -> wgpu::Texture {
-        let sdf = self
-            .sdf_pipeline
-            .compute_signed_distance_field_with_encoder(context, encoder, mask, width, height);
-        let output_texture = context.create_render_texture(width, height, "masks-feather-output");
+        let sdf = self.sdf_pipeline.compute_signed_distance_field_with_encoder(
+            context, encoder, mask, width, height, acquire,
+        );
+        let output_texture = acquire(width, height);
         let inside_view = sdf
             .inside_texture
             .create_view(&wgpu::TextureViewDescriptor::default());

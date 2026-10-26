@@ -5,6 +5,9 @@ use wgpu::util::DeviceExt;
 const JFA_INIT_SHADER_SOURCE: &str = include_str!("shaders/jfa_init.wgsl");
 const JFA_STEP_SHADER_SOURCE: &str = include_str!("shaders/jfa_step.wgsl");
 
+/// 中間與輸出貼圖從哪裡來。合成器傳入自己的貼圖池,每格回收重用,不必每格向 GPU 配置。
+pub type AcquireTexture<'a> = dyn FnMut(u32, u32) -> wgpu::Texture + 'a;
+
 pub struct SignedDistanceFieldTextures {
     pub inside_texture: wgpu::Texture,
     pub outside_texture: wgpu::Texture,
@@ -130,12 +133,16 @@ impl SdfPipeline {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("gpu-sdf-command-encoder"),
                 });
+        let mut acquire = |width: u32, height: u32| {
+            context.create_render_texture(width, height, "gpu-jfa-texture")
+        };
         let textures = self.compute_signed_distance_field_with_encoder(
             context,
             &mut encoder,
             source_texture,
             width,
             height,
+            &mut acquire,
         );
         context.queue().submit([encoder.finish()]);
         textures
@@ -148,10 +155,27 @@ impl SdfPipeline {
         source_texture: &wgpu::Texture,
         width: u32,
         height: u32,
+        acquire: &mut AcquireTexture<'_>,
     ) -> SignedDistanceFieldTextures {
         SignedDistanceFieldTextures {
-            inside_texture: self.run_jfa(context, encoder, source_texture, width, height, false),
-            outside_texture: self.run_jfa(context, encoder, source_texture, width, height, true),
+            inside_texture: self.run_jfa(
+                context,
+                encoder,
+                source_texture,
+                width,
+                height,
+                false,
+                acquire,
+            ),
+            outside_texture: self.run_jfa(
+                context,
+                encoder,
+                source_texture,
+                width,
+                height,
+                true,
+                acquire,
+            ),
         }
     }
 
@@ -163,9 +187,10 @@ impl SdfPipeline {
         width: u32,
         height: u32,
         is_inverted: bool,
+        acquire: &mut AcquireTexture<'_>,
     ) -> wgpu::Texture {
-        let ping_texture = context.create_render_texture(width, height, "gpu-jfa-ping-texture");
-        let pong_texture = context.create_render_texture(width, height, "gpu-jfa-pong-texture");
+        let ping_texture = acquire(width, height);
+        let pong_texture = acquire(width, height);
 
         self.run_pass(
             context,
