@@ -81,6 +81,8 @@ import { uppercase } from "@/utils/string";
 import { useMemo, type ComponentProps, type ReactNode } from "react";
 import type { SelectedKeyframeRef, ElementKeyframe } from "@/animation/types";
 import { cn } from "@/utils/ui";
+import { effectsRegistry } from "@/effects/registry";
+import { getEffectElementDisplayName } from "@/effects/display-name";
 import { usePropertiesStore } from "@/components/editor/panels/properties/stores/properties-store";
 import { getTrackTypeForElementType } from "@/timeline/placement/compatibility";
 import { useTimelineStore } from "@/timeline/timeline-store";
@@ -927,7 +929,15 @@ function EffectElementContent({
 				icon={MagicWand05Icon}
 				className="size-4 shrink-0 text-white"
 			/>
-			<span className="truncate text-xs text-white">{element.name}</span>
+			<span className="truncate text-xs text-white">
+				{getEffectElementDisplayName({
+					name: element.name,
+					effectType: element.effectType,
+					definitionName: effectsRegistry.has(element.effectType)
+						? effectsRegistry.get(element.effectType).name
+						: null,
+				})}
+			</span>
 		</div>
 	);
 }

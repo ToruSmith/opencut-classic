@@ -24,7 +24,7 @@ import {
 } from "@/timeline";
 import { DEFAULTS } from "@/timeline/defaults";
 import type { MediaType } from "@/media/types";
-import { buildDefaultEffectInstance } from "@/effects";
+import { buildDefaultEffectInstance, effectsRegistry } from "@/effects";
 import { buildDefaultGraphicInstance } from "@/graphics";
 import type { ParamValues } from "@/params";
 import {
@@ -133,7 +133,9 @@ export function buildEffectElement({
 	const instance = buildDefaultEffectInstance({ effectType });
 	return {
 		type: "effect",
-		name: capitalizeFirstLetter({ string: instance.type }),
+		name: effectsRegistry.has(effectType)
+			? effectsRegistry.get(effectType).name
+			: capitalizeFirstLetter({ string: instance.type }),
 		effectType,
 		params: instance.params,
 		duration: duration ?? DEFAULT_NEW_ELEMENT_DURATION,

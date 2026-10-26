@@ -49,7 +49,10 @@ describe("LUT 調色", () => {
 		for (const value of Object.values(u)) expect(Number.isFinite(value as number)).toBe(true);
 	});
 
-	test("LUT 參數隱藏(由選擇器設定)", () => {
-		expect(lutEffectDefinition.params.find((p) => p.key === "lut")?.hidden).toBe(true);
+	test("LUT 參數隱藏(由選擇器設定),預設是內建風格,放上去就有效果", () => {
+		const param = lutEffectDefinition.params.find((p) => p.key === "lut");
+		expect(param?.hidden).toBe(true);
+		expect(String(param?.default)).toMatch(/^builtin-/);
+		expect(build({ lut: param?.default, intensity: 100 })).toHaveLength(1);
 	});
 });

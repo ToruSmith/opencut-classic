@@ -1,4 +1,5 @@
 import { buildLutTexture, isStoredLut, type LutTextureLayout, type StoredLut } from "./cube";
+import { getBuiltinLut } from "./presets";
 
 /**
  * 目前專案的 LUT(記憶體)。專案載入或匯入 LUT 時登記,渲染時用 id 查。
@@ -22,14 +23,15 @@ export function registerLuts({ luts }: { luts: Record<string, unknown> | undefin
 	}
 }
 
+/** 專案匯入的 LUT,或內建風格(id 以 builtin- 開頭) */
 export function getStoredLut({ id }: { id: string }): StoredLut | null {
-	return stored.get(id) ?? null;
+	return stored.get(id) ?? getBuiltinLut({ id });
 }
 
 export function getLutTexture({ id }: { id: string }): LutTextureLayout | null {
 	const cached = textures.get(id);
 	if (cached) return cached;
-	const lut = stored.get(id);
+	const lut = getStoredLut({ id });
 	if (!lut) return null;
 	try {
 		const texture = buildLutTexture({ lut });

@@ -1,8 +1,10 @@
 import type { EffectDefinition, EffectPass } from "@/effects/types";
 import { getLutTexture, lutTextureId } from "@/lut/store";
+import { DEFAULT_LUT_PRESET_ID } from "@/lut/presets";
 
 /**
- * 套用 3D LUT(.cube)。LUT 資料存在專案的 `luts`,這裡只記 id(`lut` 參數,由效果面板的選擇器設定)。
+ * 套用 3D LUT。`lut` 參數是 id:內建風格(`builtin-…`,見 lut/presets.ts)或專案匯入的 .cube(存在 `project.luts`)。
+ * 新加的效果預設用第一個內建風格,放上去就看得到效果。
  * 找不到 LUT(還沒選、或資料不在)時不產生任何 pass,畫面維持原樣。
  */
 
@@ -40,9 +42,23 @@ export function buildLutPasses({
 export const lutEffectDefinition: EffectDefinition = {
 	type: "lut",
 	name: "LUT 調色",
-	keywords: ["lut", "cube", "color grading", "look", "調色", "風格", "濾鏡"],
+	keywords: [
+		"lut",
+		"cube",
+		"color grading",
+		"look",
+		"teal orange",
+		"調色",
+		"風格",
+		"濾鏡",
+		"青橙",
+		"電影感",
+		"日系",
+		"黑白",
+		"負片",
+	],
 	params: [
-		{ key: "lut", label: "LUT", type: "text", default: "", hidden: true },
+		{ key: "lut", label: "LUT", type: "text", default: DEFAULT_LUT_PRESET_ID, hidden: true },
 		{ key: "intensity", label: "強度", type: "number", default: 100, min: 0, max: 100, step: 1 },
 	],
 	renderer: {
