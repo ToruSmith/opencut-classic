@@ -34,6 +34,8 @@ import {
 } from "@/components/section";
 import { useEditor } from "@/editor/use-editor";
 import { DEFAULT_EXPORT_OPTIONS } from "@/export/defaults";
+import { formatRangeFileSuffix, resolveExportRange } from "@/export/range";
+import { mediaTimeToSeconds, TICKS_PER_SECOND } from "@/wasm";
 
 function isExportFormat(value: string): value is ExportFormat {
 	return EXPORT_FORMAT_VALUES.some((formatValue) => formatValue === value);
@@ -111,8 +113,37 @@ function ExportPopover({
 		DEFAULT_EXPORT_OPTIONS.includeAudio ?? true,
 	);
 
+	// 範圍匯出:只輸出時間軸上的一段(起迄會對齊影格)
+	const [useRange, setUseRange] = useState(false);
+	const [rangeStart, setRangeStart] = useState("0");
+	const [rangeEnd, setRangeEnd] = useState("");
+	const totalSeconds = mediaTimeToSeconds({ time: editor.timeline.getTotalDuration() });
+	const rangeCheck = (() => {
+		if (!useRange || !activeProject) return null;
+		const fps = activeProject.settings.fps;
+		return resolveExportRange({
+			startSeconds: Number.parseFloat(rangeStart),
+			endSeconds: Number.parseFloat(rangeEnd === "" ? String(totalSeconds) : rangeEnd),
+			totalTicks: editor.timeline.getTotalDuration(),
+			ticksPerFrame: Math.round((TICKS_PER_SECOND * fps.denominator) / fps.numerator),
+			ticksPerSecond: TICKS_PER_SECOND,
+		});
+	})();
+	const rangeInvalid = rangeCheck !== null && !rangeCheck.ok;
+	const setFromPlayhead = ({ target }: { target: "start" | "end" }) => {
+		const seconds = mediaTimeToSeconds({ time: editor.playback.getCurrentTime() });
+		const text = (Math.round(seconds * 100) / 100).toString();
+		if (target === "start") setRangeStart(text);
+		else setRangeEnd(text);
+	};
+
 	const handleExport = async () => {
 		if (!activeProject) return;
+		const range =
+			rangeCheck?.ok === true
+				? { startSeconds: rangeCheck.startSeconds, endSeconds: rangeCheck.endSeconds }
+				: undefined;
+		const nameSuffix = range ? formatRangeFileSuffix(range) : "";
 
 		// 支援的瀏覽器(Chrome/Edge):先選存檔位置,影片會邊編碼邊寫入磁碟,不佔記憶體
 		let writable: FileSystemWritableFileStream | undefined;
@@ -125,7 +156,7 @@ function ExportPopover({
 			try {
 				const extension = getExportFileExtension({ format });
 				const handle = await picker.call(window, {
-					suggestedName: `${activeProject.metadata.name}${extension}`,
+					suggestedName: `${activeProject.metadata.name}${nameSuffix}${extension}`,
 					types: [
 						{
 							description: format === "webm" ? "WebM 影片" : "MP4 影片",
@@ -147,6 +178,7 @@ function ExportPopover({
 				fps: activeProject.settings.fps,
 				includeAudio: shouldIncludeAudio,
 				writable,
+				range,
 			},
 		});
 
@@ -164,7 +196,7 @@ function ExportPopover({
 		if (result.success && result.buffer) {
 			downloadBuffer({
 				buffer: result.buffer,
-				filename: `${activeProject.metadata.name}${getExportFileExtension({ format })}`,
+				filename: `${activeProject.metadata.name}${nameSuffix}${getExportFileExtension({ format })}`,
 				mimeType: getExportMimeType({ format }),
 			});
 
@@ -285,8 +317,91 @@ function ExportPopover({
 									</Section>
 								</div>
 
+								<Section collapsible defaultOpen={false}>
+									<SectionHeader>
+										<SectionTitle>範圍</SectionTitle>
+									</SectionHeader>
+									<SectionContent>
+										<div className="flex flex-col gap-2">
+											<div className="flex items-center space-x-2">
+												<Checkbox
+													id="export-range"
+													checked={useRange}
+													onCheckedChange={(checked) => {
+														setUseRange(!!checked);
+														if (checked && rangeEnd === "") {
+															setRangeEnd((Math.round(totalSeconds * 100) / 100).toString());
+														}
+													}}
+												/>
+												<Label htmlFor="export-range">只匯出一段(檔名會帶範圍)</Label>
+											</div>
+											{useRange && (
+												<>
+													<div className="flex items-center gap-2 text-xs">
+														<span className="w-8">起點</span>
+														<input
+															type="number"
+															min={0}
+															step={0.1}
+															value={rangeStart}
+															onChange={(event) => setRangeStart(event.target.value)}
+															className="bg-background border-input w-20 rounded-md border px-1 py-0.5"
+														/>
+														<span>秒</span>
+														<Button
+															size="sm"
+															variant="outline"
+															className="h-6 px-2 text-xs"
+															onClick={() => setFromPlayhead({ target: "start" })}
+														>
+															用播放頭
+														</Button>
+													</div>
+													<div className="flex items-center gap-2 text-xs">
+														<span className="w-8">終點</span>
+														<input
+															type="number"
+															min={0}
+															step={0.1}
+															value={rangeEnd}
+															onChange={(event) => setRangeEnd(event.target.value)}
+															className="bg-background border-input w-20 rounded-md border px-1 py-0.5"
+														/>
+														<span>秒</span>
+														<Button
+															size="sm"
+															variant="outline"
+															className="h-6 px-2 text-xs"
+															onClick={() => setFromPlayhead({ target: "end" })}
+														>
+															用播放頭
+														</Button>
+													</div>
+													<p
+														className={cn(
+															"text-xs",
+															rangeInvalid ? "text-destructive" : "text-muted-foreground",
+														)}
+													>
+														{rangeCheck?.ok
+															? `實際範圍 ${rangeCheck.startSeconds.toFixed(2)} ~ ${rangeCheck.endSeconds.toFixed(2)} 秒(${rangeCheck.frameCount} 格,已對齊影格)`
+															: rangeCheck
+																? rangeCheck.reason
+																: ""}
+													</p>
+												</>
+											)}
+										</div>
+									</SectionContent>
+								</Section>
+
 								<div className="p-3 pt-0">
-									<Button onClick={handleExport} className="w-full gap-2">
+									<Button
+										onClick={handleExport}
+										className="w-full gap-2"
+										disabled={rangeInvalid}
+									>
 										<Download className="size-4" />
 										匯出
 									</Button>

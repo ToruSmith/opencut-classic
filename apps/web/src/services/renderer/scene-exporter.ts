@@ -27,6 +27,8 @@ type ExportParams = {
 	shouldIncludeAudio?: boolean;
 	audioStream?: TimelineAudioStream;
 	writable?: FileSystemWritableFileStream;
+	/** 範圍匯出:從第幾格開始、共幾格(沒給就是整段)。時間戳從 0 重新起算 */
+	range?: { startFrame: number; frameCount: number };
 };
 
 
@@ -44,6 +46,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 	private shouldIncludeAudio: boolean;
 	private audioStream?: TimelineAudioStream;
 	private writable?: FileSystemWritableFileStream;
+	private range?: { startFrame: number; frameCount: number };
 
 	private isCancelled = false;
 
@@ -56,6 +59,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		shouldIncludeAudio,
 		audioStream,
 		writable,
+		range,
 	}: ExportParams) {
 		super();
 		this.renderer = new CanvasRenderer({
@@ -69,6 +73,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		this.shouldIncludeAudio = shouldIncludeAudio ?? false;
 		this.audioStream = audioStream;
 		this.writable = writable;
+		this.range = range;
 	}
 
 	cancel(): void {
@@ -106,7 +111,9 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		const ticksPerFrame = Math.round(
 			(TICKS_PER_SECOND * fps.denominator) / fps.numerator,
 		);
-		const frameCount = Math.floor(rootNode.duration / ticksPerFrame);
+		const startFrame = this.range?.startFrame ?? 0;
+		const frameCount =
+			this.range?.frameCount ?? Math.floor(rootNode.duration / ticksPerFrame);
 
 		const outputFormat =
 			this.format === "webm" ? new WebMOutputFormat() : new Mp4OutputFormat();
@@ -178,6 +185,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 				rootNode,
 				output,
 				videoSource,
+				startFrame,
 				frameCount,
 				ticksPerFrame,
 				fpsFloat,
@@ -192,6 +200,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		rootNode,
 		output,
 		videoSource,
+		startFrame,
 		frameCount,
 		ticksPerFrame,
 		fpsFloat,
@@ -200,6 +209,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		rootNode: RootNode;
 		output: Output;
 		videoSource: CanvasSource;
+		startFrame: number;
 		frameCount: number;
 		ticksPerFrame: number;
 		fpsFloat: number;
@@ -212,11 +222,12 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 				return null;
 			}
 
-			const timeTicks = i * ticksPerFrame;
-			const timeSeconds = mediaTimeToSeconds({ time: timeTicks });
-			await pumpAudio({ untilSeconds: timeSeconds + AUDIO_LOOKAHEAD_SECONDS });
-			await this.renderer.render({ node: rootNode, time: timeTicks });
-			await videoSource.add(timeSeconds, 1 / fpsFloat);
+			// 渲染用時間軸上的時間;寫進檔案的時間戳從範圍起點重新起算
+			const timelineTicks = (startFrame + i) * ticksPerFrame;
+			const fileSeconds = mediaTimeToSeconds({ time: i * ticksPerFrame });
+			await pumpAudio({ untilSeconds: fileSeconds + AUDIO_LOOKAHEAD_SECONDS });
+			await this.renderer.render({ node: rootNode, time: timelineTicks });
+			await videoSource.add(fileSeconds, 1 / fpsFloat);
 
 			this.emit("progress", i / frameCount);
 		}

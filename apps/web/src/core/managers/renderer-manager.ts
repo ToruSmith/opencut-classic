@@ -10,6 +10,8 @@ import {
 } from "@/media/audio-export";
 import { formatTimecode } from "opencut-wasm";
 import { frameRateToFloat } from "@/fps/utils";
+import { resolveExportRange } from "@/export/range";
+import { TICKS_PER_SECOND } from "@/wasm";
 import { downloadBlob } from "@/utils/browser";
 
 type SnapshotResult =
@@ -150,7 +152,7 @@ export class RendererManager {
 		onProgress?: ({ progress }: { progress: number }) => void;
 		onCancel?: () => boolean;
 	}): Promise<ExportResult> {
-		const { format, quality, fps, includeAudio, writable } = options;
+		const { format, quality, fps, includeAudio, writable, range } = options;
 		let audioStream: TimelineAudioStream | null = null;
 
 		try {
@@ -170,13 +172,40 @@ export class RendererManager {
 			const exportFps = fps ?? activeProject.settings.fps;
 			const canvasSize = activeProject.settings.canvasSize;
 
+			// 範圍匯出:起迄對齊影格;影片只渲染範圍內的格數,音訊只混範圍內的部分
+			let resolvedRange: { startFrame: number; frameCount: number } | undefined;
+			let audioStartTicks = 0;
+			let audioEndTicks: number = duration;
+			if (range) {
+				const ticksPerFrame = Math.round(
+					(TICKS_PER_SECOND * exportFps.denominator) / exportFps.numerator,
+				);
+				const resolved = resolveExportRange({
+					startSeconds: range.startSeconds,
+					endSeconds: range.endSeconds,
+					totalTicks: duration,
+					ticksPerFrame,
+					ticksPerSecond: TICKS_PER_SECOND,
+				});
+				if (!resolved.ok) {
+					return { success: false, error: `匯出範圍無效:${resolved.reason}` };
+				}
+				resolvedRange = {
+					startFrame: resolved.startFrame,
+					frameCount: resolved.frameCount,
+				};
+				audioStartTicks = resolved.startTicks;
+				audioEndTicks = resolved.endTicks;
+			}
+
 			// 音訊不再一次混成整段,而是匯出時一小段一小段產生
 			if (includeAudio) {
 				onProgress?.({ progress: 0.05 });
 				audioStream = await createTimelineAudioStream({
 					tracks,
 					mediaAssets,
-					duration,
+					duration: audioEndTicks,
+					startTime: audioStartTicks,
 				});
 			}
 
@@ -197,6 +226,7 @@ export class RendererManager {
 				shouldIncludeAudio: !!includeAudio,
 				audioStream: audioStream || undefined,
 				writable,
+				range: resolvedRange,
 			});
 
 			exporter.on("progress", (progress) => {

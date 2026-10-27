@@ -303,13 +303,16 @@ export async function createTimelineAudioStream({
 	tracks,
 	mediaAssets,
 	duration,
+	startTime = 0,
 	sampleRate = EXPORT_SAMPLE_RATE,
 	segmentSeconds = MIX_SEGMENT_SECONDS,
 }: {
 	tracks: SceneTracks;
 	mediaAssets: MediaAsset[];
-	/** 時間軸總長度(ticks) */
+	/** 要混到哪裡為止(ticks);沒有 startTime 時就是時間軸總長度 */
 	duration: number;
+	/** 從哪裡開始混(ticks),範圍匯出用;預設 0。只處理 [startTime, duration),不會先混完整段再裁 */
+	startTime?: number;
 	sampleRate?: number;
 	segmentSeconds?: number;
 }): Promise<TimelineAudioStream | null> {
@@ -317,6 +320,10 @@ export async function createTimelineAudioStream({
 	if (clips.length === 0) return null;
 
 	const totalSamples = Math.ceil((duration / TICKS_PER_SECOND) * sampleRate);
+	const startSample = Math.min(
+		totalSamples,
+		Math.max(0, Math.round((startTime / TICKS_PER_SECOND) * sampleRate)),
+	);
 	const limiter = new LookaheadLimiter({ sampleRate });
 	// 限幅器有固定延遲:多送 latency 個靜音把尾巴推出來,再丟掉最前面 latency 個輸出
 	const processedSamples = totalSamples + limiter.latency;
@@ -483,7 +490,7 @@ export async function createTimelineAudioStream({
 		});
 	};
 
-	let cursor = 0;
+	let cursor = startSample;
 	let samplesToDrop = limiter.latency;
 	let disposed = false;
 
@@ -491,7 +498,8 @@ export async function createTimelineAudioStream({
 		sampleRate,
 		numberOfChannels: OUTPUT_CHANNELS,
 		get progress() {
-			return Math.min(1, cursor / processedSamples);
+			const span = Math.max(1, processedSamples - startSample);
+			return Math.min(1, (cursor - startSample) / span);
 		},
 		async nextChunk() {
 			while (!disposed && cursor < processedSamples) {

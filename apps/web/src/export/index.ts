@@ -20,6 +20,8 @@ export interface ExportOptions {
 	includeAudio?: boolean;
 	/** 直接串流寫入磁碟(File System Access API),避免整支影片放進記憶體 */
 	writable?: FileSystemWritableFileStream;
+	/** 只匯出時間軸上的一段(秒);沒給就匯出整段。實際起迄會對齊到影格 */
+	range?: { startSeconds: number; endSeconds: number };
 }
 
 export interface ExportResult {
