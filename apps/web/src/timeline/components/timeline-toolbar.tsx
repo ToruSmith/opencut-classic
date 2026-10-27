@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useEditor } from "@/editor/use-editor";
 import { freezeFrameAtPlayhead } from "@/timeline/freeze-frame";
 import { useElementSelection } from "@/timeline/hooks/element/use-element-selection";
@@ -45,11 +46,13 @@ import {
 	Layers01Icon,
 	Chart03Icon,
 	Unlink02Icon,
+	MusicNote03Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { OcRippleIcon } from "@/components/icons";
 import { GraphEditorPopover } from "./graph-editor/popover";
 import { PopoverTrigger } from "@/components/ui/popover";
+import { BeatMarkersPopover } from "@/timeline/bookmarks/components/beat-markers-popover";
 import { useGraphEditorController } from "./graph-editor/use-controller";
 
 export function TimelineToolbar({
@@ -105,6 +108,7 @@ function ToolbarLeftSection() {
 	);
 	const { selectedElements } = useElementSelection();
 	const graphEditor = useGraphEditorController();
+	const [beatPanelOpen, setBeatPanelOpen] = useState(false);
 	const isCurrentlyBookmarked = useEditor((e) =>
 		e.scenes.isBookmarked({ time: e.playback.getCurrentTime() }),
 	);
@@ -226,6 +230,15 @@ function ToolbarLeftSection() {
 						}
 					/>
 				</Tooltip>
+
+				<BeatMarkersPopover open={beatPanelOpen} onOpenChange={setBeatPanelOpen}>
+					<ToolbarButton
+						icon={<HugeiconsIcon icon={MusicNote03Icon} />}
+						tooltip="節拍標記(分析聲音,在節奏點加書籤)"
+						isActive={beatPanelOpen}
+						buttonWrapper={(button) => <PopoverTrigger asChild>{button}</PopoverTrigger>}
+					/>
+				</BeatMarkersPopover>
 
 				<GraphEditorPopover
 					open={graphEditor.open}

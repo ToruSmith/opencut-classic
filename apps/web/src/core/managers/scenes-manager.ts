@@ -20,6 +20,7 @@ import {
 	RenameSceneCommand,
 	ToggleBookmarkCommand,
 	UpdateBookmarkCommand,
+	SetBeatBookmarksCommand,
 } from "@/commands/scene";
 import type { MediaTime } from "@/wasm";
 
@@ -113,6 +114,11 @@ export class ScenesManager {
 	async toggleBookmark({ time }: { time: MediaTime }): Promise<void> {
 		const command = new ToggleBookmarkCommand(time);
 		this.editor.command.execute({ command });
+	}
+
+	/** 用節拍分析結果取代節拍書籤(空陣列 = 清除) */
+	setBeatBookmarks({ times }: { times: MediaTime[] }): void {
+		this.editor.command.execute({ command: new SetBeatBookmarksCommand(times) });
 	}
 
 	isBookmarked({ time }: { time: MediaTime }): boolean {
