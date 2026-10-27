@@ -30,6 +30,44 @@
   - `src/services/storage/`:IndexedDB / OPFS 與專案遷移(`migrations/`)。
 - 路由是 `HashRouter`,頁面在 `src/app/`。沒有 Next.js;`next/*` 已全部移除。
 
+## 功能地圖(接手先看這裡)
+
+2026-10 這一輪加的功能,各自的細節在下面對應章節;**每個功能的實機驗收步驟都在 `docs/qa-checklist.md`(表格最右欄是章節編號)**(CI 看不到畫面、聲音、效能)。
+
+| 功能 | 純函式 / 核心 | 入口 | 檢查清單 |
+|---|---|---|---|
+| 效果:馬賽克 / 色差 / 色調分離 / 底片顆粒 / 震動 / 放射模糊 / 故障 / 鏡像 | `rust/crates/effects/src/shaders/*.wgsl`、`effects/definitions/{stylize,motion}.ts` | 特效面板 | 3.9、3.11 |
+| LUT(.cube + 內建風格) | `lut/{cube,store,presets}.ts` | 效果「LUT」 | 3.10、3.11 |
+| 效果組合(衝擊、復古膠卷…) | `effects/presets.ts`、`timeline.insertElements` | 特效面板上方 | 3.13 |
+| 進出場動畫、隨機轉場 | `transitions/presets.ts` | 轉場面板 | 3.16 |
+| 交叉溶解、推移 / 滑動擦除 / 縮放 | `transitions/{cross-dissolve,pair-transition}.ts` | 轉場面板「兩段之間」 | 3.14 |
+| 節拍標記、依節拍分割、重排、一鍵快剪 | `media/beat-detect.ts`、`timeline/{reorder,bookmarks/beat-markers}.ts`、`QuickCutCommand` | 時間軸工具列音符按鈕 | 3.15 |
+| 音訊淡入淡出、版本紀錄、代理檔、備份 / 重新連結 | 見各章節 | 屬性面板 / 素材庫 / 專案選單 | 3.6 ~ 3.8、3.12 |
+| 左側面板細捲軸 | `PanelView`(`base-panel.tsx`) | 所有左側面板 | 3.17 |
+
+### 尚未做 / 可以接著做(都是使用者看過、評估過的)
+
+- **自動從素材庫挑片段排滿整首歌**(BeatEdit、mvmake、CapCut 自動剪輯的做法:節拍標記 + 依標記自動排素材)。
+  目前的「一鍵快剪」只處理**使用者已經選好、同一條軌道**的素材;要做就得自己建立新片段(trim / retime / 連動音訊的計算要小心),且選片規則很吃品味。
+- **真正的遮罩擦除**:遮罩參數不能做關鍵影格。兩條路:讓遮罩參數可動畫(動到動畫系統與專案格式,要寫遷移),或做成帶「進度」參數的 shader 特效。後者風險小得多。
+- **節拍面板拆成「分析」與「剪輯」兩個分頁**:現在內容很長(已加捲動),使用者可能會想拆。
+- **節拍偵測在真實音樂上的準確度還沒驗證**(只用合成節拍測過):節奏不穩 / 變速 / 純人聲的歌可能不準;若使用者回報偏差,從 `beat-detect.ts` 的門檻與 BPM 先驗(偏好 120)下手。
+- 沒有刪除 LUT 的介面(沒用到的也留在專案裡,約 140 KB/個)。
+- 已知失敗的 3 個遮罩測試(見「已知問題」)還沒人判斷是測試過時還是程式要改。
+
+### 給接手者的提醒(踩過的坑)
+
+- **看不到畫面**:這個環境沒有 GPU,無法實際跑編輯器的渲染。shader 通過 naga、測試通過,都**不代表畫面對**;每次都請使用者依檢查清單實機確認,不要宣稱「效果正常」。
+- **一個壞掉的 shader 會讓所有效果一起壞**(瀏覽器到執行時才編譯)。改 `.wgsl` 一定要靠 CI 的 `shaders` job。
+- **OPFS 的 `File` 會失效**(刪除或改寫後):要用就重新 `getFile()`(見「已知問題」)。
+- **`UpdateElementsCommand` 逐筆套用**,主軌「最早片段貼齊 0」的規則會在中途狀態誤判;要一次改一批 `startTime` 請用 `ReorderElementsCommand` 的做法。
+- **`previewElements` 的 `params` 是整包取代**,不是合併。
+- **組合多個指令成單一復原步驟**有兩種做法:`BatchCommand`(子指令本身要能獨立執行,例如 `insertElements`、`splitElementsAtTimes`),
+  或像 `QuickCutCommand` 直接呼叫子指令的 `execute()` 並自己 `undo`(子指令之間有「後一個要用前一個產生的 id」的依賴時用這個)。
+- 預覽吃力時先建議使用者對素材**建立代理檔**,再去看渲染效能(`window.__renderPerf = true`)。
+- 沒有 node_modules 時,依賴 `opencut-wasm` 的測試在本機會失敗;**純函式的測試**(不 import 到 `@/wasm` 的)才能在本機直接跑。新增邏輯時盡量寫成純函式,測試才有地方跑。
+- 提交訊息用繁體中文,結尾要帶 `Co-Authored-By` 與 `Claude-Session` 兩行(見 git log 範例)。
+
 ## 慣例
 
 - 介面字串是**繁體中文,直接寫在原始碼裡**,沒有 i18n 框架。
@@ -109,7 +147,6 @@
   - **一鍵快剪**:`QuickCutCommand` 把「首尾相接(`computeReorder` 的 `pack` 模式)→ 依節拍切(`pickSplitTimes` + `SplitElementsCommand`,由後往前)→ 選擇性打散」
     做成一個復原步驟:**直接呼叫既有指令的 `execute()`**(不經過 `editor.command.execute`,所以不會各自進歷史),`undo` 還原最初的軌道。
     只支援同一條軌道的素材;沒有自己建立新片段(避開 trim / retime 計算),所以也不做「智慧選片」。
-    其他工具(BeatEdit、mvmake、CapCut 自動剪輯)的做法是「節拍標記 + 依標記自動排素材」;這裡先做到標記、分割、重排,沒有「自動從素材庫挑片段排滿整首歌」。
 - **LUT(.cube)**:解析與打包在 `lut/cube.ts`(純函式,有測試),存在專案的 `project.luts`(id → 名稱、邊長、base64 RGB8)。
   匯入時重新取樣到 0..1 定義域、最多 33³,所以備份與版本紀錄會自動帶著(約 140 KB/個)。id 由內容決定,同一個檔案只存一份;
   目前沒有刪除 LUT 的介面,沒用到的也會留在專案裡。
