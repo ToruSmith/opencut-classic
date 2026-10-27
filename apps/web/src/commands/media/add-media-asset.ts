@@ -8,6 +8,7 @@ import type { FrameRate } from "opencut-wasm";
 import { hasMediaId } from "@/timeline/element-utils";
 import { frameRatesEqual, getHighestImportedVideoFps } from "@/fps/utils";
 import { UpdateProjectSettingsCommand } from "@/commands/project";
+import { swapRestoredAsset } from "./swap-restored-asset";
 
 export class AddMediaAssetCommand extends Command {
 	private assetId: string;
@@ -15,6 +16,8 @@ export class AddMediaAssetCommand extends Command {
 	private createdAsset: MediaAsset | null = null;
 	private previousProjectFps: FrameRate | null = null;
 	private appliedProjectFps: FrameRate | null = null;
+	/** 重做時檔案還在儲存空間裡(復原只移除記錄),不要再寫一次檔案 */
+	private hasExecuted = false;
 
 	constructor({
 		projectId,
@@ -49,12 +52,20 @@ export class AddMediaAssetCommand extends Command {
 			importedAssets: [this.createdAsset],
 		});
 
-		storageService
-			.saveMediaAsset({
-				projectId: this.projectId,
-				mediaAsset: this.createdAsset,
-			})
-			.catch((error) => {
+		const isRedo = this.hasExecuted;
+		this.hasExecuted = true;
+		const persist = isRedo
+			? storageService
+					.restoreMediaAsset({
+						projectId: this.projectId,
+						mediaAsset: this.createdAsset,
+					})
+					.then((restored) => swapRestoredAsset({ restored }))
+			: storageService.saveMediaAsset({
+					projectId: this.projectId,
+					mediaAsset: this.createdAsset,
+				});
+		persist.catch((error) => {
 				console.error("Failed to save media item:", error);
 
 				const currentAssets = editor.media.getAssets();
@@ -104,7 +115,11 @@ export class AddMediaAssetCommand extends Command {
 
 			if (this.createdAsset) {
 				storageService
-					.deleteMediaAsset({ projectId: this.projectId, id: this.assetId })
+					.deleteMediaAsset({
+						projectId: this.projectId,
+						id: this.assetId,
+						keepFile: true,
+					})
 					.catch((error) => {
 						console.error("Failed to delete media item on undo:", error);
 					});

@@ -6,6 +6,7 @@ import { storageService } from "@/services/storage/service";
 import { videoCache } from "@/services/video-cache/service";
 import { waveformCache } from "@/services/waveform-cache/service";
 import { hasMediaId } from "@/timeline/element-utils";
+import { swapRestoredAsset } from "./swap-restored-asset";
 import type { SceneTracks } from "@/timeline";
 
 export class RemoveMediaAssetCommand extends Command {
@@ -80,8 +81,14 @@ export class RemoveMediaAssetCommand extends Command {
 			editor.timeline.deleteElements({ elements: elementsToRemove });
 		}
 
+		// 只移除記錄、檔案先留著:復原時要從儲存空間重新讀一份新的檔案
+		// (記憶體裡的 File 在檔案被刪後可能失效)。留下的檔案下次開啟專案時清掉。
 		storageService
-			.deleteMediaAsset({ projectId: this.projectId, id: this.assetId })
+			.deleteMediaAsset({
+				projectId: this.projectId,
+				id: this.assetId,
+				keepFile: true,
+			})
 			.catch((error) => {
 				console.error("Failed to delete media item:", error);
 			});
@@ -105,10 +112,11 @@ export class RemoveMediaAssetCommand extends Command {
 			});
 
 			storageService
-				.saveMediaAsset({
+				.restoreMediaAsset({
 					projectId: this.projectId,
 					mediaAsset: restoredAsset,
 				})
+				.then((restored) => swapRestoredAsset({ restored }))
 				.catch((error) => {
 					console.error("Failed to restore media item on undo:", error);
 				});

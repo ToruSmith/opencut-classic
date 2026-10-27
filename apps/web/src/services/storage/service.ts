@@ -1,6 +1,7 @@
 import type { TProject, TProjectMetadata } from "@/project/types";
 import { getProjectDurationFromScenes } from "@/timeline/scenes";
 import type { MediaAsset } from "@/media/types";
+import { findOrphanMediaFileKeys } from "./media-orphans";
 import { IndexedDBAdapter } from "./indexeddb-adapter";
 import { OPFSAdapter } from "./opfs-adapter";
 import {
@@ -532,18 +533,7 @@ class StorageService {
 		const { mediaMetadataAdapter, mediaAssetsAdapter } =
 			this.getProjectMediaAdapters({ projectId });
 
-		const metadata: MediaAssetData = {
-			id: mediaAsset.id,
-			name: mediaAsset.name,
-			type: mediaAsset.type,
-			size: mediaAsset.file.size,
-			lastModified: mediaAsset.file.lastModified,
-			width: mediaAsset.width,
-			height: mediaAsset.height,
-			duration: mediaAsset.duration,
-			thumbnailUrl: mediaAsset.thumbnailUrl,
-			ephemeral: mediaAsset.ephemeral,
-		};
+		const metadata = this.buildMediaMetadata({ mediaAsset });
 
 		try {
 			await mediaAssetsAdapter.set({
@@ -569,6 +559,67 @@ class StorageService {
 
 			throw error;
 		}
+	}
+
+	private buildMediaMetadata({ mediaAsset }: { mediaAsset: MediaAsset }): MediaAssetData {
+		return {
+			id: mediaAsset.id,
+			name: mediaAsset.name,
+			type: mediaAsset.type,
+			size: mediaAsset.file.size,
+			lastModified: mediaAsset.file.lastModified,
+			width: mediaAsset.width,
+			height: mediaAsset.height,
+			duration: mediaAsset.duration,
+			thumbnailUrl: mediaAsset.thumbnailUrl,
+			ephemeral: mediaAsset.ephemeral,
+		};
+	}
+
+	/**
+	 * 「復原刪除素材」/「重做匯入素材」用:儲存空間裡還有檔案就只補回記錄,並重新讀一份新的 File 回傳
+	 * (記憶體裡的舊 File 在檔案被動過之後可能已經失效);檔案已經不在才用傳進來的 File 重寫一份。
+	 * 不要在檔案還在時再寫一次檔案:改寫會讓所有已經拿到的 File 失效。
+	 */
+	async restoreMediaAsset({
+		projectId,
+		mediaAsset,
+	}: {
+		projectId: string;
+		mediaAsset: MediaAsset;
+	}): Promise<MediaAsset> {
+		const { mediaMetadataAdapter, mediaAssetsAdapter } =
+			this.getProjectMediaAdapters({ projectId });
+
+		const existing = await mediaAssetsAdapter.get(mediaAsset.id).catch(() => null);
+		if (!existing) {
+			await this.saveMediaAsset({ projectId, mediaAsset });
+			return mediaAsset;
+		}
+
+		await mediaMetadataAdapter.set({
+			key: mediaAsset.id,
+			value: this.buildMediaMetadata({ mediaAsset: { ...mediaAsset, file: existing } }),
+		});
+		return (await this.loadMediaAsset({ projectId, id: mediaAsset.id })) ?? mediaAsset;
+	}
+
+	/**
+	 * 清掉沒有素材記錄的檔案(刪除素材時為了讓「復原」能用而留下的)。
+	 * 只在開啟專案時呼叫,那時復原紀錄已經不存在。規則見 media-orphans.ts。
+	 */
+	async purgeOrphanMediaFiles({ projectId }: { projectId: string }): Promise<number> {
+		const { mediaMetadataAdapter, mediaAssetsAdapter } =
+			this.getProjectMediaAdapters({ projectId });
+		const [fileKeys, metadataKeys] = await Promise.all([
+			mediaAssetsAdapter.list(),
+			mediaMetadataAdapter.list(),
+		]);
+		const orphans = findOrphanMediaFileKeys({ fileKeys, metadataKeys });
+		for (const key of orphans) {
+			await mediaAssetsAdapter.remove(key).catch(() => {});
+		}
+		return orphans.length;
 	}
 
 	async loadMediaAsset({
@@ -714,18 +765,24 @@ class StorageService {
 		return mediaItems;
 	}
 
+	/**
+	 * `keepFile`:只移除記錄、檔案留著(之後由 purgeOrphanMediaFiles 清掉),
+	 * 給可以「復原」的刪除用,讓復原能從儲存空間重新讀到檔案。
+	 */
 	async deleteMediaAsset({
 		projectId,
 		id,
+		keepFile = false,
 	}: {
 		projectId: string;
 		id: string;
+		keepFile?: boolean;
 	}): Promise<void> {
 		const { mediaMetadataAdapter, mediaAssetsAdapter } =
 			this.getProjectMediaAdapters({ projectId });
 
 		await Promise.all([
-			mediaAssetsAdapter.remove(id),
+			keepFile ? Promise.resolve() : mediaAssetsAdapter.remove(id),
 			mediaMetadataAdapter.remove(id),
 		]);
 		await this.deleteMediaProxy({ projectId, id }).catch(() => {});

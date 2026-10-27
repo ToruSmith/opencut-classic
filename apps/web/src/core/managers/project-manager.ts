@@ -159,6 +159,10 @@ export class ProjectManager {
 
 		this.editor.save.pause();
 		await this.ensureStorageMigrations();
+		// 清掉「刪除素材」時為了讓復原能用而留下的檔案(這時復原紀錄已經不在了);失敗不影響開啟
+		await storageService
+			.purgeOrphanMediaFiles({ projectId: id })
+			.catch((error) => console.warn("清理孤兒素材檔失敗", error));
 		this.editor.media.clearAllAssets();
 		this.editor.scenes.clearScenes();
 

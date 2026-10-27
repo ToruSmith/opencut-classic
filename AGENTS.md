@@ -61,8 +61,12 @@
 - **單元測試有「棘輪」**:CI 的測試步驟(`.github/scripts/test-ratchet.sh`)會把失敗的測試與 `.github/known-failing-tests.txt` 比對——清單以外的新失敗會讓 CI 失敗(Deploy 不會發佈);已修好的會提醒你從清單刪掉。整個測試檔載入失敗(bun 只印 `Unhandled error`、沒有 `(fail)`)也算失敗。
 - `apps/web/test-setup.ts`(由 `bunfig.toml` 預載)用真正的 WASM 初始化 `opencut-wasm`。bun 不支援 wasm-pack bundler 目標的 ESM 匯入 .wasm,沒有這一步,依賴 WASM 的 `const`(像 `ZERO_MEDIA_TIME`)會在模組載入到一半時丟錯。本機沒有 node_modules 時這個預載會失敗並印警告,測試仍會跑,只是依賴 WASM 的會失敗。
 - 目前已知失敗 3 個(都在遮罩,原因寫在 `known-failing-tests.txt`),需要有人判斷是測試過時還是程式要改。
-- 刪除素材後「復原」:素材檔在刪除當下就從 OPFS 移除,復原時用的是記憶體裡的 `File`。OPFS 的 `File` 在檔案被刪後可能無法再讀
-  (Chrome 會丟 `NotReadableError`),所以復原可能救不回素材。尚未修(要改成延後刪除)。
+- ~~刪除素材後「復原」救不回素材~~(已修):OPFS 的 `File` 在檔案被刪**或被改寫**後就失效(Chromium 實測:刪除 → `NotFoundError`,
+  改寫 → `NotReadableError`;只有重新 `getFile()` 的新 `File` 能讀)。現在可以復原的刪除只移除素材記錄、檔案先留著
+  (`deleteMediaAsset({ keepFile: true })`),復原 / 重做用 `restoreMediaAsset`:檔案還在就只補回記錄並**重新讀一份新的 File**
+  (`swapRestoredAsset` 換進記憶體),不要在檔案還在時再寫一次檔案。留下的孤兒檔案在下次 `loadProject` 時由
+  `purgeOrphanMediaFiles` 清掉(規則在 `media-orphans.ts`:完全沒有素材記錄時不清,避免誤刪)。
+  代價:刪掉的大檔案要到下次開啟專案才會釋放空間。
 - 日誌下載被擋,只能讀 annotations。
 - Rust release 使用 `lto` + `codegen-units=1`(Cargo.toml),CI 的 wasm 步驟會比以前慢一些。
 
