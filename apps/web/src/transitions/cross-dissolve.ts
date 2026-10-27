@@ -53,7 +53,7 @@ export type DissolvePlan =
 const VISUAL_TYPES = new Set(["video", "image", "text", "sticker", "graphic"]);
 const AUDIO_TYPES = new Set(["video", "audio"]);
 
-interface Located {
+export interface Located {
 	track: DissolveTrack;
 	element: DissolveElement;
 	/** 畫面圖層:數字越大越上層;音訊軌是 null(不畫在畫面上) */
@@ -78,11 +78,24 @@ function locateAll({ tracks }: { tracks: DissolveTracks }): Located[] {
 
 const end = (element: DissolveElement) => element.startTime + element.duration;
 
+export interface TransitionPair {
+	first: Located;
+	second: Located;
+	overlap: number;
+	firstVisual: boolean;
+	secondVisual: boolean;
+}
+
+export type FindPairResult =
+	| ({ ok: true } & TransitionPair)
+	| { ok: false; reason: string };
+
 /**
  * 找出和選取片段構成「前一段 / 後一段」的配對:
  * 後一段的開頭落在前一段裡,而且前一段在後一段結束前就結束(不是整段蓋住)。
+ * 有多個候選時取重疊最長的一對。
  */
-export function planCrossDissolve({
+export function findTransitionPair({
 	tracks,
 	trackId,
 	elementId,
@@ -90,7 +103,7 @@ export function planCrossDissolve({
 	tracks: DissolveTracks;
 	trackId: string;
 	elementId: string;
-}): DissolvePlan {
+}): FindPairResult {
 	const all = locateAll({ tracks });
 	const selected = all.find(
 		(item) => item.track.id === trackId && item.element.id === elementId,
@@ -118,14 +131,32 @@ export function planCrossDissolve({
 				"找不到可以溶接的片段:請把後一段放在另一條軌道,開頭和前一段的結尾重疊。",
 		};
 	}
-
-	// 有多個候選時,取重疊最長的那一對
 	pairs.sort((x, y) => y.overlap - x.overlap);
 	const { first, second, overlap } = pairs[0];
+	return {
+		ok: true,
+		first,
+		second,
+		overlap,
+		firstVisual: first.layer !== null && VISUAL_TYPES.has(first.element.type),
+		secondVisual: second.layer !== null && VISUAL_TYPES.has(second.element.type),
+	};
+}
+
+export function planCrossDissolve({
+	tracks,
+	trackId,
+	elementId,
+}: {
+	tracks: DissolveTracks;
+	trackId: string;
+	elementId: string;
+}): DissolvePlan {
+	const found = findTransitionPair({ tracks, trackId, elementId });
+	if (!found.ok) return found;
+	const { first, second, overlap, firstVisual, secondVisual } = found;
 	const actions: DissolveAction[] = [];
 
-	const firstVisual = first.layer !== null && VISUAL_TYPES.has(first.element.type);
-	const secondVisual = second.layer !== null && VISUAL_TYPES.has(second.element.type);
 	if (firstVisual && secondVisual) {
 		if ((second.layer ?? 0) > (first.layer ?? 0)) {
 			actions.push({

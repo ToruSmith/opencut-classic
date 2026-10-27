@@ -80,7 +80,7 @@ export function clampTransitionSeconds({
  * side 為 "in" 時進度 0 在片段開頭、1 在動畫結束;
  * 為 "out" 時時間軸鏡像,進度 0 在動畫開始、1 在片段結尾,並且數值順序反轉。
  */
-function ramp({
+export function ramp({
 	propertyPath,
 	side,
 	durationSeconds,

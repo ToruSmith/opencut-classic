@@ -85,6 +85,10 @@
   `MediaAsset.proxyFile` 只在預覽品質使用(`resolve.ts` 的 `pickVideoSource`,videoCache key 是 `<id>@proxy`),匯出與快照一律讀原始檔。
 - **交叉溶解**:`transitions/cross-dissolve.ts`(純函式)找出重疊的前後兩段,上層片段做不透明度關鍵影格、聲音用上面的淡化參數;
   套用時用 `timeline.applyElementEdits` 合成一個復原步驟。同一條軌道的片段不能重疊,所以溶接一定是跨軌道。
+- **兩段之間的轉場**(`transitions/pair-transition.ts`,純函式,有測試):推移、滑動擦除、縮放。沿用交叉溶解的做法(後一段放在另一條軌道、和前一段重疊),
+  配對邏輯在 `cross-dissolve.ts` 的 `findTransitionPair`。全用關鍵影格(位置 / 縮放 / 不透明度)+ 音訊淡化,以 `applyElementEdits` 合成一個復原步驟。
+  **遮罩參數不能做關鍵影格**(`animation/` 只認片段屬性、特效參數、圖形參數),所以沒有「遮罩掃過」式的擦除;
+  「滑動擦除」是上層片段滑進來蓋住(覆蓋)或滑出去露出下面(揭開)。要做真正的擦除得讓遮罩參數可動畫,或做成帶進度參數的特效。
 - **LUT(.cube)**:解析與打包在 `lut/cube.ts`(純函式,有測試),存在專案的 `project.luts`(id → 名稱、邊長、base64 RGB8)。
   匯入時重新取樣到 0..1 定義域、最多 33³,所以備份與版本紀錄會自動帶著(約 140 KB/個)。id 由內容決定,同一個檔案只存一份;
   目前沒有刪除 LUT 的介面,沒用到的也會留在專案裡。
