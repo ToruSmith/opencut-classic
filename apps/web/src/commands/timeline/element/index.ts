@@ -6,6 +6,7 @@ export { UpdateElementsCommand } from "./update-elements";
 export { ToggleSourceAudioSeparationCommand } from "./toggle-source-audio-separation";
 export { MoveElementCommand } from "./move-elements";
 export { ReorderElementsCommand } from "./reorder-elements";
+export { QuickCutCommand } from "./quick-cut";
 
 export * from "./keyframes";
 export * from "./effects";

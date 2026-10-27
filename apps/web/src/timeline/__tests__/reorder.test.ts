@@ -51,3 +51,15 @@ describe("computeReorder", () => {
 		expect(computeReorder({ pieces: [piece("a", 0, 5)], mode: "shuffle" })).toEqual([]);
 	});
 });
+
+describe("computeReorder pack", () => {
+	test("維持順序、補掉空隙", () => {
+		const gap = [piece("a", 10, 5), piece("b", 30, 5), piece("c", 50, 5)];
+		const result = computeReorder({ pieces: gap, mode: "pack" });
+		expect(result.map((p) => [p.elementId, p.startTime])).toEqual([
+			["a", 10],
+			["b", 15],
+			["c", 20],
+		]);
+	});
+});

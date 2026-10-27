@@ -17,7 +17,8 @@ export interface ReorderPlacement {
 	startTime: number;
 }
 
-export type ReorderMode = "shuffle" | "reverse";
+/** pack = 維持目前順序,只是首尾相接(補掉空隙) */
+export type ReorderMode = "shuffle" | "reverse" | "pack";
 
 /** 可重現的亂數(mulberry32) */
 function createRandom({ seed }: { seed: number }): () => number {
@@ -62,7 +63,9 @@ export function computeReorder({
 		if (list.length < 2) continue;
 		const ordered = [...list].sort((a, b) => a.startTime - b.startTime);
 		let next: ReorderPiece[];
-		if (mode === "reverse") {
+		if (mode === "pack") {
+			next = ordered;
+		} else if (mode === "reverse") {
 			next = [...ordered].reverse();
 		} else {
 			// 筆數 ≥ 3 時盡量避免洗完和原本一樣

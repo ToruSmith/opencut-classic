@@ -42,6 +42,7 @@ import {
 	SplitElementsCommand,
 	MoveElementCommand,
 	ReorderElementsCommand,
+	QuickCutCommand,
 	TracksSnapshotCommand,
 	UpsertKeyframeCommand,
 	RemoveKeyframeCommand,
@@ -258,6 +259,13 @@ export class TimelineManager {
 		if (placements.length === 0) return 0;
 		this.editor.command.execute({ command: new ReorderElementsCommand(placements) });
 		return placements.length;
+	}
+
+	/** 一鍵快剪:首尾相接 → 依節拍切 → 選擇性打散,一個復原步驟;回傳切出的片段數 */
+	quickCut(params: ConstructorParameters<typeof QuickCutCommand>[0]): number {
+		const command = new QuickCutCommand(params);
+		this.editor.command.execute({ command });
+		return command.getPieceCount();
 	}
 
 	getTotalDuration(): MediaTime {

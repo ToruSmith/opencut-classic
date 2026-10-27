@@ -34,6 +34,7 @@ export function BeatMarkersPopover({
 	const [everyBeats, setEveryBeats] = useState(1);
 	const [minPieceSeconds, setMinPieceSeconds] = useState(0);
 	const [minGapSeconds, setMinGapSeconds] = useState(0.15);
+	const [quickShuffle, setQuickShuffle] = useState(true);
 
 	const busy = progress !== null;
 
@@ -128,6 +129,36 @@ export function BeatMarkersPopover({
 			splitTimes: [...splitTimes] as MediaTime[],
 		});
 		toast.success(`已在 ${splitTimes.size} 個節拍處分割(${affected} 個片段)`);
+	};
+
+	const handleQuickCut = () => {
+		const selected = editor.selection.getSelectedElements();
+		const items = editor.timeline.getElementsWithTracks({ elements: selected });
+		if (items.length === 0) {
+			toast.error("請先在時間軸選取要快剪的素材(同一條軌道)");
+			return;
+		}
+		if (new Set(items.map((item) => item.track.id)).size > 1) {
+			toast.error("選取的素材需要在同一條軌道上");
+			return;
+		}
+		const beats = editor.scenes
+			.getActiveScene()
+			.bookmarks.filter((bookmark) => isBeatBookmark({ bookmark }))
+			.map((bookmark) => bookmark.time as number);
+		if (beats.length === 0) {
+			toast.error("還沒有節拍標記,請先分析");
+			return;
+		}
+		const pieces = editor.timeline.quickCut({
+			elements: selected,
+			beats,
+			every: everyBeats,
+			minGap: minPieceSeconds * TICKS_PER_SECOND,
+			shuffle: quickShuffle,
+			seed: Math.floor(Math.random() * 1_000_000),
+		});
+		toast.success(`已快剪成 ${pieces} 段${quickShuffle ? "並打散" : ""}(可一次復原)`);
 	};
 
 	const handleReorder = (mode: "shuffle" | "reverse") => {
@@ -265,6 +296,20 @@ export function BeatMarkersPopover({
 						onClick={handleSplitAtBeats}
 					>
 						依節拍分割
+					</Button>
+					<span className="text-muted-foreground text-xs">
+						一鍵快剪:選取同一條軌道的幾段素材 → 首尾相接 → 依上面的設定在節拍處切開 →(可選)打散。一次復原。
+					</span>
+					<label className="flex items-center gap-2 text-xs">
+						<input
+							type="checkbox"
+							checked={quickShuffle}
+							onChange={(event) => setQuickShuffle(event.target.checked)}
+						/>
+						切完後隨機打散
+					</label>
+					<Button size="sm" disabled={busy || beatCount === 0} onClick={handleQuickCut}>
+						一鍵快剪
 					</Button>
 					<span className="text-muted-foreground text-xs">
 						重排選取的片段(同軌道;從最早的位置首尾相接,會補掉空隙)。建議用「節拍格」切出等長的小段再重排,節拍才不會跑掉。
