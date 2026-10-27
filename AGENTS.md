@@ -44,6 +44,7 @@
 | 進度式擦除轉場(線性 / 圓形光圈 / 時鐘) | `wipe.wgsl`、`effects/definitions/wipe.ts`、`transitions/wipe-transition.ts`、`ApplyWipeCommand` | 轉場面板「兩段之間的擦除」、特效「擦除」 | 3.18 |
 | 節拍標記、依節拍分割、重排、一鍵快剪 | `media/beat-detect.ts`、`timeline/{reorder,bookmarks/beat-markers}.ts`、`QuickCutCommand` | 時間軸工具列音符按鈕 | 3.15 |
 | 自動排片(依節拍從素材庫抽片段排滿整首歌) | `timeline/auto-cut.ts`、`AutoCutCommand` | 節拍面板「自動排片」 | 3.19 |
+| 範圍匯出(只輸出時間軸上的一段) | `export/range.ts`、`createTimelineAudioStream({ startTime })`、`SceneExporter` 的 `range` | 匯出視窗「範圍」 | 3.20 |
 | 音訊淡入淡出、版本紀錄、代理檔、備份 / 重新連結 | 見各章節 | 屬性面板 / 素材庫 / 專案選單 | 3.6 ~ 3.8、3.12 |
 | LRC 歌詞匯入、點拍同步歌詞 | `subtitles/{lrc,timed-lines}.ts`、`subtitles/components/lyrics-tap.tsx` | 字幕面板「匯入」/「點拍同步歌詞」 | 4.1 |
 | 左側面板細捲軸 | `PanelView`(`base-panel.tsx`) | 所有左側面板 | 3.17 |
@@ -144,6 +145,10 @@
   `AutoCutCommand`:新增一條影片軌(`AddTrackCommand`,index 0)後**只更新一次時間軸狀態**放入全部片段(不是每個片段一個 `InsertElementCommand`,避免 N 次場景重建),
   影片 `isSourceAudioEnabled: false`(靜音);`replaceTrackId` 讓「再按一次」取代上次的結果而不是越疊越多;一個復原步驟。
   排滿的範圍 = 音訊軌最後一個片段的結尾;介面在節拍面板,素材清單是素材庫裡的影片 / 圖片(可勾選),沒建立代理檔的影片會提示。
+- **範圍匯出**(`export/range.ts` 的 `resolveExportRange`,純函式,有測試):起迄(秒)對齊到影格邊界(`startFrame` / `frameCount`,終點夾在最後一格),
+  影片與音訊都用對齊後的同一組 tick,所以長度一致。`SceneExporter` 的 `range` 只渲染範圍內的格數(渲染用時間軸時間,寫進檔案的時間戳從 0 起算);
+  音訊走 `createTimelineAudioStream({ startTime, duration })`,**只混 [startTime, duration)**,游標從起點開始,不是整段混完再裁。
+  檔名後綴 `formatRangeFileSuffix`(`_00-12_00-45`)。綠幕 / 黑底合成沒有做(要動合成器)。取消匯出沿用既有機制。
 - **隨機轉場**(`transitions/presets.ts` 的 `pickRandomMotions`,純函式,有測試):對選取的多個片段(依開始時間排序)各抽一種進場 / 出場動畫
   (滑入 ×4、縮放、旋轉、彈出;**不含單純淡化**,否則切點處會一格一格閃黑),相鄰不重複、同種子可重現。
   不需要重疊軌道,直接用單一片段的進出場關鍵影格,所以可以套在快剪切出來的小段上;長度仍受「不超過片段一半」限制。
