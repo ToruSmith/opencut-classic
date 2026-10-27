@@ -5,7 +5,7 @@ import { Popover, PopoverContent } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
 import { useEditor } from "@/editor/use-editor";
 import type { BeatMode } from "@/media/beat-detect";
-import { mediaTimeFromSeconds } from "@/wasm";
+import { mediaTimeFromSeconds, TICKS_PER_SECOND } from "@/wasm";
 import { isBeatBookmark, pickSplitTimes } from "@/timeline/bookmarks/beat-markers";
 import type { MediaTime } from "@/wasm";
 
@@ -32,6 +32,8 @@ export function BeatMarkersPopover({
 	const [summary, setSummary] = useState<string | null>(null);
 	const abortRef = useRef<AbortController | null>(null);
 	const [everyBeats, setEveryBeats] = useState(1);
+	const [minPieceSeconds, setMinPieceSeconds] = useState(0);
+	const [minGapSeconds, setMinGapSeconds] = useState(0.15);
 
 	const busy = progress !== null;
 
@@ -53,6 +55,7 @@ export function BeatMarkersPopover({
 				totalDuration,
 				mode,
 				sensitivity: sensitivity / 100,
+				minGapSeconds: mode === "onsets" ? minGapSeconds : undefined,
 				onProgress: setProgress,
 				signal: controller.signal,
 			});
@@ -111,6 +114,7 @@ export function BeatMarkersPopover({
 				start: element.startTime,
 				end: element.startTime + element.duration,
 				every: everyBeats,
+				minGap: minPieceSeconds * TICKS_PER_SECOND,
 			});
 			if (times.length > 0) affected++;
 			for (const time of times) splitTimes.add(time);
@@ -181,6 +185,22 @@ export function BeatMarkersPopover({
 							disabled={busy}
 							onValueChange={([value]) => setSensitivity(value ?? 50)}
 						/>
+						<span className="text-muted-foreground mt-1 text-xs">
+							最短間隔(兩個標記至少隔多久;標記太密就調大)
+						</span>
+						<div className="flex gap-1">
+							{[0.15, 0.3, 0.5, 1].map((value) => (
+								<Button
+									key={value}
+									size="sm"
+									variant={minGapSeconds === value ? "default" : "outline"}
+									disabled={busy}
+									onClick={() => setMinGapSeconds(value)}
+								>
+									{value} 秒
+								</Button>
+							))}
+						</div>
 					</div>
 				) : (
 					<p className="text-muted-foreground text-xs">
@@ -212,7 +232,7 @@ export function BeatMarkersPopover({
 				<div className="border-t pt-3 flex flex-col gap-2">
 					<span className="text-muted-foreground text-xs">依節拍分割選取的片段(剪 AMV)</span>
 					<div className="flex items-center gap-1">
-						{[1, 2, 4].map((n) => (
+						{[1, 2, 4, 8].map((n) => (
 							<Button
 								key={n}
 								size="sm"
@@ -220,6 +240,21 @@ export function BeatMarkersPopover({
 								onClick={() => setEveryBeats(n)}
 							>
 								每 {n} 拍
+							</Button>
+						))}
+					</div>
+					<span className="text-muted-foreground text-xs">
+						最短片段(切出來的每一段至少多長;切太碎就調大)
+					</span>
+					<div className="flex flex-wrap gap-1">
+						{[0, 1, 2, 3, 5].map((value) => (
+							<Button
+								key={value}
+								size="sm"
+								variant={minPieceSeconds === value ? "default" : "outline"}
+								onClick={() => setMinPieceSeconds(value)}
+							>
+								{value === 0 ? "不限" : `${value} 秒`}
 							</Button>
 						))}
 					</div>

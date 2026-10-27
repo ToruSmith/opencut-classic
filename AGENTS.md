@@ -97,6 +97,9 @@
   - **依節拍分割**(節拍面板下方):`pickSplitTimes`(純函式,有測試)取選取片段範圍內的節拍,每 1 / 2 / 4 拍一刀;
     `timeline.splitElementsAtTimes` 用 `BatchCommand` 合成一個復原步驟,**由後往前切**(左半一直保留原 id,下一刀才對得到同一個片段),
     並用 `SplitElementsCommand` 的 `keepNames` 避免名稱一直疊 `(left)`。
+  - **控制切割數量**:重音模式有「最短間隔」(`pickOnsets` 的 `minGapSeconds`,0.15 / 0.3 / 0.5 / 1 秒),靈敏度 0.5 以下會往嚴格拉(門檻倍率 2.1 → 6.0);
+    分割有「最短片段」(`pickSplitTimes` 的 `minGap`,從片段開頭算起,離上一刀或片段頭尾太近的切點略過,保證不會切出更短的片段)與每 1 / 2 / 4 / 8 拍。
+    切很多小段、又隨機排序時預覽會吃力(每個切點都要重新定位解碼),先到素材庫對該素材「建立代理檔」(0.5 秒一個關鍵影格)。
   - **重排片段**(同一個面板):`timeline/reorder.ts`(純函式,有測試)對選取的同軌道片段做「隨機打散(可重現的種子,≥3 片時保證和原順序不同)」或「反轉」,
     從原本最早的開始時間起首尾相接(會補掉空隙)。`ReorderElementsCommand` **一次換掉整批 `startTime`**,不走 `UpdateElementsCommand`:
     後者逐筆套用,主軌「最早片段貼齊 0」的規則(`update-pipeline.ts`)會在中途狀態誤判。

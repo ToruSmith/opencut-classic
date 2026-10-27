@@ -14,3 +14,16 @@ describe("pickSplitTimes", () => {
 		expect(pickSplitTimes({ beats, start: 0, end: 100, every: 0 })).toEqual([0, 10, 20, 30, 40, 50].filter((t) => t > 0));
 	});
 });
+
+describe("pickSplitTimes 最短片段", () => {
+	const beats = [10, 20, 30, 40, 50, 60, 70, 80, 90];
+	test("不會切出比 minGap 短的片段(含頭尾)", () => {
+		const times = pickSplitTimes({ beats, start: 0, end: 95, every: 1, minGap: 25 });
+		const edges = [0, ...times, 95];
+		for (let i = 1; i < edges.length; i++) expect(edges[i] - edges[i - 1]).toBeGreaterThanOrEqual(25);
+		expect(times).toEqual([30, 60]);
+	});
+	test("minGap 為 0 時和以前相同", () => {
+		expect(pickSplitTimes({ beats, start: 0, end: 95, every: 4, minGap: 0 })).toEqual([10, 50, 90]);
+	});
+});

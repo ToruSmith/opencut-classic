@@ -21,6 +21,7 @@ export async function analyzeTimelineBeats({
 	totalDuration,
 	mode,
 	sensitivity,
+	minGapSeconds,
 	onProgress,
 	signal,
 }: {
@@ -30,6 +31,7 @@ export async function analyzeTimelineBeats({
 	totalDuration: number;
 	mode: BeatMode;
 	sensitivity: number;
+	minGapSeconds?: number;
 	onProgress?: (progress: number) => void;
 	signal?: AbortSignal;
 }): Promise<BeatAnalysis | null> {
@@ -67,6 +69,7 @@ export async function analyzeTimelineBeats({
 		sampleRate: stream.sampleRate,
 		mode,
 		sensitivity,
+		minGapSeconds,
 		durationSeconds: totalDuration / TICKS_PER_SECOND,
 	});
 }

@@ -90,7 +90,8 @@ export function pickOnsets({
 	const n = strength.length;
 	if (n < 3) return [];
 	const s = Math.min(1, Math.max(0, sensitivity));
-	const multiplier = 3 - 1.8 * s; // 0 → 3.0,1 → 1.2
+	// 0.5 以上:3.0 → 1.2 的線性(和以前相同);0.5 以下往嚴格的方向拉,0 → 6.0(只留最明顯的重音)
+	const multiplier = s >= 0.5 ? 3 - 1.8 * s : 2.1 + (1 - 2 * s) * 3.9;
 	const globalMean = mean(strength);
 	if (globalMean <= 0) return [];
 
@@ -264,6 +265,7 @@ export function analyzeBeats({
 	mode,
 	sensitivity,
 	durationSeconds,
+	minGapSeconds,
 	hop = BEAT_HOP_SIZE,
 }: {
 	energies: Float32Array;
@@ -271,12 +273,16 @@ export function analyzeBeats({
 	mode: BeatMode;
 	sensitivity: number;
 	durationSeconds: number;
+	/** 重音模式:兩個重音的最短間隔(秒) */
+	minGapSeconds?: number;
 	hop?: number;
 }): BeatAnalysis {
 	const frameRate = sampleRate / hop;
 	const strength = onsetStrength({ energies });
 	if (mode === "onsets") {
-		return { times: pickOnsets({ strength, frameRate, sensitivity, hop, sampleRate }) };
+		return {
+			times: pickOnsets({ strength, frameRate, sensitivity, minGapSeconds, hop, sampleRate }),
+		};
 	}
 	const tempo = estimateTempo({ strength, frameRate, hop, sampleRate });
 	if (!tempo) return { times: [] };

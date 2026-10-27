@@ -39,13 +39,30 @@ export function pickSplitTimes({
 	start,
 	end,
 	every,
+	minGap = 0,
 }: {
 	beats: number[];
 	start: number;
 	end: number;
 	every: number;
+	/**
+	 * 切出來的片段最短長度(和 beats 同單位)。0 = 不限。
+	 * 從片段開頭算起,離上一刀(或片段開頭 / 結尾)太近的切點會被略過,
+	 * 所以不會切出比這個更短的片段。
+	 */
+	minGap?: number;
 }): number[] {
 	const step = Math.max(1, Math.floor(every));
 	const inside = beats.filter((time) => time > start && time < end).sort((a, b) => a - b);
-	return inside.filter((_, index) => index % step === 0);
+	const picked = inside.filter((_, index) => index % step === 0);
+	if (!(minGap > 0)) return picked;
+	const result: number[] = [];
+	let previous = start;
+	for (const time of picked) {
+		if (time - previous >= minGap && end - time >= minGap) {
+			result.push(time);
+			previous = time;
+		}
+	}
+	return result;
 }

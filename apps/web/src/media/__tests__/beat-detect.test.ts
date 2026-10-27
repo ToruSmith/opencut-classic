@@ -100,3 +100,17 @@ describe("節拍偵測", () => {
 		expect(buildBeatGrid({ bpm: 0, phaseSeconds: 0, durationSeconds: 2 })).toEqual([]);
 	});
 });
+
+describe("靈敏度與最短間隔", () => {
+	test("靈敏度越低重音越少;最短間隔會合併太近的重音", () => {
+		const { samples } = clickTrack({ bpm: 240, seconds: 12 });
+		const energies = energiesOf(samples);
+		const count = (sensitivity: number, minGapSeconds?: number) =>
+			analyzeBeats({ energies, sampleRate: SR, mode: "onsets", sensitivity, durationSeconds: 12, minGapSeconds })
+				.times.length;
+		expect(count(0.5)).toBeGreaterThan(30);
+		expect(count(0.5, 0.5)).toBeLessThan(count(0.5) * 0.7);
+		expect(count(0.5, 1)).toBeLessThanOrEqual(12);
+		expect(count(0)).toBeLessThanOrEqual(count(0.5));
+	});
+});
