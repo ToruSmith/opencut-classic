@@ -29,6 +29,7 @@ import {
 } from "@/animation";
 import { resolveAnimationTarget } from "@/timeline/animation-targets";
 import { BatchCommand } from "@/commands";
+import { computeReorder, type ReorderMode, type ReorderPiece } from "@/timeline/reorder";
 import {
 	AddTrackCommand,
 	RemoveTrackCommand,
@@ -40,6 +41,7 @@ import {
 	UpdateElementsCommand,
 	SplitElementsCommand,
 	MoveElementCommand,
+	ReorderElementsCommand,
 	TracksSnapshotCommand,
 	UpsertKeyframeCommand,
 	RemoveKeyframeCommand,
@@ -231,6 +233,31 @@ export class TimelineManager {
 		);
 		const command = commands.length === 1 ? commands[0] : new BatchCommand(commands);
 		this.editor.command.execute({ command });
+	}
+
+	/** 重排選取的片段(同軌道內打散或反轉),一個復原步驟;回傳實際移動的片段數 */
+	reorderElements({
+		elements,
+		mode,
+		seed,
+	}: {
+		elements: { trackId: string; elementId: string }[];
+		mode: ReorderMode;
+		seed?: number;
+	}): number {
+		const pieces: ReorderPiece[] = [];
+		for (const { element, track } of this.getElementsWithTracks({ elements })) {
+			pieces.push({
+				trackId: track.id,
+				elementId: element.id,
+				startTime: element.startTime,
+				duration: element.duration,
+			});
+		}
+		const placements = computeReorder({ pieces, mode, seed });
+		if (placements.length === 0) return 0;
+		this.editor.command.execute({ command: new ReorderElementsCommand(placements) });
+		return placements.length;
 	}
 
 	getTotalDuration(): MediaTime {

@@ -126,6 +126,24 @@ export function BeatMarkersPopover({
 		toast.success(`已在 ${splitTimes.size} 個節拍處分割(${affected} 個片段)`);
 	};
 
+	const handleReorder = (mode: "shuffle" | "reverse") => {
+		const selected = editor.selection.getSelectedElements();
+		if (selected.length < 2) {
+			toast.error("請先在時間軸選取至少兩個片段(同一條軌道)");
+			return;
+		}
+		const moved = editor.timeline.reorderElements({
+			elements: selected,
+			mode,
+			seed: Math.floor(Math.random() * 1_000_000),
+		});
+		if (moved === 0) {
+			toast.error("選取的片段需要在同一條軌道上,而且至少兩個");
+			return;
+		}
+		toast.success(mode === "shuffle" ? `已重新打散 ${moved} 個片段` : `已反轉 ${moved} 個片段的順序`);
+	};
+
 	return (
 		<Popover open={open} onOpenChange={onOpenChange}>
 			{children}
@@ -213,6 +231,17 @@ export function BeatMarkersPopover({
 					>
 						依節拍分割
 					</Button>
+					<span className="text-muted-foreground text-xs">
+						重排選取的片段(同軌道;從最早的位置首尾相接,會補掉空隙)。建議用「節拍格」切出等長的小段再重排,節拍才不會跑掉。
+					</span>
+					<div className="flex gap-1">
+						<Button size="sm" variant="outline" onClick={() => handleReorder("shuffle")}>
+							隨機打散
+						</Button>
+						<Button size="sm" variant="outline" onClick={() => handleReorder("reverse")}>
+							反轉順序
+						</Button>
+					</div>
 				</div>
 				{(summary || beatCount > 0) && (
 					<p className="text-muted-foreground text-xs">

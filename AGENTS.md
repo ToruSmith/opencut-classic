@@ -97,6 +97,10 @@
   - **依節拍分割**(節拍面板下方):`pickSplitTimes`(純函式,有測試)取選取片段範圍內的節拍,每 1 / 2 / 4 拍一刀;
     `timeline.splitElementsAtTimes` 用 `BatchCommand` 合成一個復原步驟,**由後往前切**(左半一直保留原 id,下一刀才對得到同一個片段),
     並用 `SplitElementsCommand` 的 `keepNames` 避免名稱一直疊 `(left)`。
+  - **重排片段**(同一個面板):`timeline/reorder.ts`(純函式,有測試)對選取的同軌道片段做「隨機打散(可重現的種子,≥3 片時保證和原順序不同)」或「反轉」,
+    從原本最早的開始時間起首尾相接(會補掉空隙)。`ReorderElementsCommand` **一次換掉整批 `startTime`**,不走 `UpdateElementsCommand`:
+    後者逐筆套用,主軌「最早片段貼齊 0」的規則(`update-pipeline.ts`)會在中途狀態誤判。
+    其他工具(BeatEdit、mvmake、CapCut 自動剪輯)的做法是「節拍標記 + 依標記自動排素材」;這裡先做到標記、分割、重排,沒有「自動從素材庫挑片段排滿整首歌」。
 - **LUT(.cube)**:解析與打包在 `lut/cube.ts`(純函式,有測試),存在專案的 `project.luts`(id → 名稱、邊長、base64 RGB8)。
   匯入時重新取樣到 0..1 定義域、最多 33³,所以備份與版本紀錄會自動帶著(約 140 KB/個)。id 由內容決定,同一個檔案只存一份;
   目前沒有刪除 LUT 的介面,沒用到的也會留在專案裡。
