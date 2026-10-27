@@ -44,6 +44,7 @@ import {
 	ReorderElementsCommand,
 	QuickCutCommand,
 	AutoCutCommand,
+	KaraokeCommand,
 	TracksSnapshotCommand,
 	UpsertKeyframeCommand,
 	RemoveKeyframeCommand,
@@ -275,6 +276,13 @@ export class TimelineManager {
 		const command = new AutoCutCommand(params);
 		this.editor.command.execute({ command });
 		return command.getTrackId();
+	}
+
+	/** 卡拉 OK 填色:對選取的字幕加上一層會隨時間填色的複本,一個復原步驟;回傳處理的句數 */
+	applyKaraoke(params: ConstructorParameters<typeof KaraokeCommand>[0]): number {
+		const command = new KaraokeCommand(params);
+		this.editor.command.execute({ command });
+		return command.getCount();
 	}
 
 	getTotalDuration(): MediaTime {

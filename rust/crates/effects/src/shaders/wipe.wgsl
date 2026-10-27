@@ -7,7 +7,9 @@ struct VertexOutput {
 // scalars   = (模式, 進度 0..1, 柔邊 0..1, 角度 度)
 //   模式 0 = 線性、1 = 圓形光圈、2 = 時鐘;加 3 = 反向(線性反向掃、光圈由外往內、時鐘逆時針)
 //   角度:線性是擦除前進的方向(0 = 往右,90 = 往下);時鐘是起始角度(0 = 12 點鐘)
-// direction = (中心 X, 中心 Y),0..1,只有光圈與時鐘使用
+// direction = 光圈 / 時鐘:(中心 X, 中心 Y);線性:(範圍起點, 範圍終點),都是 0..1。
+//   線性的範圍是沿前進方向的位置(角度 0 時就是畫面 X 的比例):進度只在這個範圍內掃過,範圍外直接視為起點 / 終點。
+//   (0, 1) = 整個畫面。卡拉 OK 填色用它讓進度剛好對應文字的左右邊界
 // 進度 0 = 完全沒擦(原圖),進度 1 = 完全擦完(全透明)
 struct EffectUniforms {
     resolution: vec2f,
@@ -28,7 +30,10 @@ fn sweep_position(uv: vec2f, base_mode: u32) -> f32 {
     if base_mode == 0u {
         let dir = vec2f(cos(angle), sin(angle));
         let extent = abs(dir.x) + abs(dir.y);
-        return clamp(0.5 + dot(uv - vec2f(0.5), dir) / max(extent, 0.0001), 0.0, 1.0);
+        let along = clamp(0.5 + dot(uv - vec2f(0.5), dir) / max(extent, 0.0001), 0.0, 1.0);
+        let range_start = uniforms.direction.x;
+        let range_end = uniforms.direction.y;
+        return clamp((along - range_start) / max(range_end - range_start, 0.0001), 0.0, 1.0);
     }
     let center = uniforms.direction;
     let delta = (uv - center) * resolution;

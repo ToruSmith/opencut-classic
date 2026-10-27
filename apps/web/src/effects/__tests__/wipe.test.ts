@@ -58,3 +58,27 @@ describe("擦除特效", () => {
 		}
 	});
 });
+
+describe("擦除特效:線性範圍", () => {
+	test("線性模式把 rangeStart / rangeEnd 放進 u_center_x / u_center_y", () => {
+		const u = buildWipeUniforms({
+			effectParams: { mode: "linear", rangeStart: 20, rangeEnd: 70, centerX: 10, centerY: 90 },
+		});
+		expect(u.u_center_x).toBeCloseTo(0.2);
+		expect(u.u_center_y).toBeCloseTo(0.7);
+	});
+
+	test("線性模式沒給範圍時用 0 / 100(舊的擦除不受影響)", () => {
+		const u = buildWipeUniforms({ effectParams: { mode: "linear" } });
+		expect(u.u_center_x).toBe(0);
+		expect(u.u_center_y).toBe(1);
+	});
+
+	test("光圈與時鐘仍用 centerX / centerY", () => {
+		const u = buildWipeUniforms({
+			effectParams: { mode: "iris", rangeStart: 20, rangeEnd: 70, centerX: 30, centerY: 40 },
+		});
+		expect(u.u_center_x).toBeCloseTo(0.3);
+		expect(u.u_center_y).toBeCloseTo(0.4);
+	});
+});

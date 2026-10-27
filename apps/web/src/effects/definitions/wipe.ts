@@ -45,8 +45,16 @@ export function buildWipeUniforms({
 		u_progress: clamp({ value: num({ params: effectParams, key: "progress", fallback: 0 }), min: 0, max: 100 }) / 100,
 		u_softness: clamp({ value: num({ params: effectParams, key: "softness", fallback: 20 }), min: 0, max: 100 }) / 100,
 		u_angle: clamp({ value: num({ params: effectParams, key: "angle", fallback: 0 }), min: 0, max: 360 }),
-		u_center_x: clamp({ value: num({ params: effectParams, key: "centerX", fallback: 50 }), min: 0, max: 100 }) / 100,
-		u_center_y: clamp({ value: num({ params: effectParams, key: "centerY", fallback: 50 }), min: 0, max: 100 }) / 100,
+		// 同一組 uniform 兩種用途:線性 = 掃過範圍的起點 / 終點,光圈與時鐘 = 中心 X / Y
+		...(kindIndex === 0
+			? {
+					u_center_x: clamp({ value: num({ params: effectParams, key: "rangeStart", fallback: 0 }), min: 0, max: 100 }) / 100,
+					u_center_y: clamp({ value: num({ params: effectParams, key: "rangeEnd", fallback: 100 }), min: 0, max: 100 }) / 100,
+				}
+			: {
+					u_center_x: clamp({ value: num({ params: effectParams, key: "centerX", fallback: 50 }), min: 0, max: 100 }) / 100,
+					u_center_y: clamp({ value: num({ params: effectParams, key: "centerY", fallback: 50 }), min: 0, max: 100 }) / 100,
+				}),
 	};
 }
 
@@ -82,6 +90,8 @@ export const wipeEffectDefinition: EffectDefinition = {
 		{ key: "reverse", label: "反向", type: "boolean", default: false, keyframable: false },
 		{ key: "centerX", label: "中心 X(光圈 / 時鐘)", type: "number", default: 50, min: 0, max: 100, step: 1, keyframable: false },
 		{ key: "centerY", label: "中心 Y(光圈 / 時鐘)", type: "number", default: 50, min: 0, max: 100, step: 1, keyframable: false },
+		{ key: "rangeStart", label: "線性掃過起點(%)", type: "number", default: 0, min: 0, max: 100, step: 1, keyframable: false },
+		{ key: "rangeEnd", label: "線性掃過終點(%)", type: "number", default: 100, min: 0, max: 100, step: 1, keyframable: false },
 	],
 	renderer: {
 		passes: [
