@@ -212,6 +212,27 @@ export class TimelineManager {
 		return command.getRightSideElements();
 	}
 
+	/**
+	 * 在多個時間點切開同一批片段,合成一個復原步驟。
+	 * 由後往前切:左半一直保留原本的 id,下一刀還能對同一個片段下手。
+	 */
+	splitElementsAtTimes({
+		elements,
+		splitTimes,
+	}: {
+		elements: { trackId: string; elementId: string }[];
+		splitTimes: MediaTime[];
+	}): void {
+		const times = [...new Set(splitTimes)].sort((a, b) => b - a);
+		if (times.length === 0 || elements.length === 0) return;
+		const commands = times.map(
+			(splitTime) =>
+				new SplitElementsCommand({ elements, splitTime, keepNames: true }),
+		);
+		const command = commands.length === 1 ? commands[0] : new BatchCommand(commands);
+		this.editor.command.execute({ command });
+	}
+
 	getTotalDuration(): MediaTime {
 		const activeScene = this.editor.scenes.getActiveSceneOrNull();
 		if (!activeScene) {

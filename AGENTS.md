@@ -94,6 +94,9 @@
   再在 ±3% 內微調速度與相位讓格線貼合整首歌。`media/beat-analysis.ts` 走 `createTimelineAudioStream`(22050 Hz、分段、動態載入),
   所以分析的是**時間軸混音後**的聲音,時間直接對應時間軸。結果寫成場景書籤(`note: "節拍"`、橘色),書籤本來就會被時間軸吸附;
   `SetBeatBookmarksCommand` 一次取代所有節拍書籤(重新分析不會累積,手動書籤不受影響,空陣列 = 清除),一個復原步驟。入口在時間軸工具列的音符按鈕。
+  - **依節拍分割**(節拍面板下方):`pickSplitTimes`(純函式,有測試)取選取片段範圍內的節拍,每 1 / 2 / 4 拍一刀;
+    `timeline.splitElementsAtTimes` 用 `BatchCommand` 合成一個復原步驟,**由後往前切**(左半一直保留原 id,下一刀才對得到同一個片段),
+    並用 `SplitElementsCommand` 的 `keepNames` 避免名稱一直疊 `(left)`。
 - **LUT(.cube)**:解析與打包在 `lut/cube.ts`(純函式,有測試),存在專案的 `project.luts`(id → 名稱、邊長、base64 RGB8)。
   匯入時重新取樣到 0..1 定義域、最多 33³,所以備份與版本紀錄會自動帶著(約 140 KB/個)。id 由內容決定,同一個檔案只存一份;
   目前沒有刪除 LUT 的介面,沒用到的也會留在專案裡。

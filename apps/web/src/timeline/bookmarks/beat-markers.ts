@@ -29,3 +29,23 @@ export function replaceBeatBookmarks({
 	}
 	return [...kept, ...added].sort((a, b) => a.time - b.time);
 }
+
+/**
+ * 挑出要切的時間點:片段範圍內(不含頭尾)的節拍,每 `every` 拍取一個,從範圍內第一個節拍開始算。
+ * 時間單位由呼叫端決定(tick),只要 beats / start / end 一致即可。
+ */
+export function pickSplitTimes({
+	beats,
+	start,
+	end,
+	every,
+}: {
+	beats: number[];
+	start: number;
+	end: number;
+	every: number;
+}): number[] {
+	const step = Math.max(1, Math.floor(every));
+	const inside = beats.filter((time) => time > start && time < end).sort((a, b) => a - b);
+	return inside.filter((_, index) => index % step === 0);
+}

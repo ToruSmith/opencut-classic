@@ -6,7 +6,8 @@ import { Slider } from "@/components/ui/slider";
 import { useEditor } from "@/editor/use-editor";
 import type { BeatMode } from "@/media/beat-detect";
 import { mediaTimeFromSeconds } from "@/wasm";
-import { isBeatBookmark } from "@/timeline/bookmarks/beat-markers";
+import { isBeatBookmark, pickSplitTimes } from "@/timeline/bookmarks/beat-markers";
+import type { MediaTime } from "@/wasm";
 
 /**
  * 節拍標記:分析時間軸的聲音,在重音或節拍位置加上橘色書籤。
@@ -30,6 +31,7 @@ export function BeatMarkersPopover({
 	const [progress, setProgress] = useState<number | null>(null);
 	const [summary, setSummary] = useState<string | null>(null);
 	const abortRef = useRef<AbortController | null>(null);
+	const [everyBeats, setEveryBeats] = useState(1);
 
 	const busy = progress !== null;
 
@@ -83,6 +85,45 @@ export function BeatMarkersPopover({
 			abortRef.current = null;
 			setProgress(null);
 		}
+	};
+
+	const handleSplitAtBeats = () => {
+		const selected = editor.selection.getSelectedElements();
+		const items = editor.timeline.getElementsWithTracks({ elements: selected });
+		if (items.length === 0) {
+			toast.error("請先在時間軸選取要分割的片段");
+			return;
+		}
+		const beats = editor.scenes
+			.getActiveScene()
+			.bookmarks.filter((bookmark) => isBeatBookmark({ bookmark }))
+			.map((bookmark) => bookmark.time as number);
+		if (beats.length === 0) {
+			toast.error("還沒有節拍標記,請先分析");
+			return;
+		}
+		// 各片段分別挑切點;同一批一起切,切點取聯集(重疊的片段在同一個時間點一起被切)
+		const splitTimes = new Set<number>();
+		let affected = 0;
+		for (const { element } of items) {
+			const times = pickSplitTimes({
+				beats,
+				start: element.startTime,
+				end: element.startTime + element.duration,
+				every: everyBeats,
+			});
+			if (times.length > 0) affected++;
+			for (const time of times) splitTimes.add(time);
+		}
+		if (splitTimes.size === 0) {
+			toast.error("選取的片段範圍內沒有節拍標記");
+			return;
+		}
+		editor.timeline.splitElementsAtTimes({
+			elements: selected,
+			splitTimes: [...splitTimes] as MediaTime[],
+		});
+		toast.success(`已在 ${splitTimes.size} 個節拍處分割(${affected} 個片段)`);
 	};
 
 	return (
@@ -149,6 +190,29 @@ export function BeatMarkersPopover({
 							清除節拍標記
 						</Button>
 					)}
+				</div>
+				<div className="border-t pt-3 flex flex-col gap-2">
+					<span className="text-muted-foreground text-xs">依節拍分割選取的片段(剪 AMV)</span>
+					<div className="flex items-center gap-1">
+						{[1, 2, 4].map((n) => (
+							<Button
+								key={n}
+								size="sm"
+								variant={everyBeats === n ? "default" : "outline"}
+								onClick={() => setEveryBeats(n)}
+							>
+								每 {n} 拍
+							</Button>
+						))}
+					</div>
+					<Button
+						size="sm"
+						variant="outline"
+						disabled={busy || beatCount === 0}
+						onClick={handleSplitAtBeats}
+					>
+						依節拍分割
+					</Button>
 				</div>
 				{(summary || beatCount > 0) && (
 					<p className="text-muted-foreground text-xs">

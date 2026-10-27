@@ -23,20 +23,29 @@ export class SplitElementsCommand extends Command {
 	private readonly elements: { trackId: string; elementId: string }[];
 	private readonly splitTime: MediaTime;
 	private readonly retainSide: "both" | "left" | "right";
+	private readonly keepNames: boolean;
 
 	constructor({
 		elements,
 		splitTime,
 		retainSide = "both",
+		keepNames = false,
 	}: {
 		elements: { trackId: string; elementId: string }[];
 		splitTime: MediaTime;
 		retainSide?: "both" | "left" | "right";
+		/** 連續切很多刀時不要一直在名稱後面加 (left) / (right) */
+		keepNames?: boolean;
 	}) {
 		super();
+		this.keepNames = keepNames;
 		this.elements = elements;
 		this.splitTime = splitTime;
 		this.retainSide = retainSide;
+	}
+
+	private partName({ name, side }: { name: string; side: "left" | "right" }): string {
+		return this.keepNames ? name : `${name} (${side})`;
 	}
 
 	getRightSideElements(): { trackId: string; elementId: string }[] {
@@ -137,7 +146,7 @@ export class SplitElementsCommand extends Command {
 							...element,
 							duration: leftVisibleDuration,
 							trimEnd: leftTrimEnd,
-							name: `${element.name} (left)`,
+							name: this.partName({ name: element.name, side: "left" }),
 							params: fadeParams.left,
 							animations: leftAnimations,
 							...(retimeRef !== undefined ? { retime: retimeRef } : {}),
@@ -156,7 +165,7 @@ export class SplitElementsCommand extends Command {
 							startTime: this.splitTime,
 							duration: rightVisibleDuration,
 							trimStart: rightTrimStart,
-							name: `${element.name} (right)`,
+							name: this.partName({ name: element.name, side: "right" }),
 							params: fadeParams.right,
 							animations: rightAnimations,
 							...(retimeRef !== undefined ? { retime: retimeRef } : {}),
@@ -173,7 +182,7 @@ export class SplitElementsCommand extends Command {
 							...element,
 							duration: leftVisibleDuration,
 							trimEnd: leftTrimEnd,
-							name: `${element.name} (left)`,
+							name: this.partName({ name: element.name, side: "left" }),
 							params: fadeParams.left,
 							animations: leftAnimations,
 							...(retimeRef !== undefined ? { retime: retimeRef } : {}),
@@ -184,7 +193,7 @@ export class SplitElementsCommand extends Command {
 							startTime: this.splitTime,
 							duration: rightVisibleDuration,
 							trimStart: rightTrimStart,
-							name: `${element.name} (right)`,
+							name: this.partName({ name: element.name, side: "right" }),
 							params: fadeParams.right,
 							animations: rightAnimations,
 							...(retimeRef !== undefined ? { retime: retimeRef } : {}),
