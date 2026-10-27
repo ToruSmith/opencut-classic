@@ -41,7 +41,7 @@ export function PanelView({
 			)}
 			<div
 				className={cn(
-					"scrollbar-hidden size-full overflow-y-auto",
+					"scrollbar-thin min-h-0 w-full flex-1 overflow-y-auto",
 					hideHeader ? "pt-4" : "pt-2",
 					scrollClassName,
 				)}
