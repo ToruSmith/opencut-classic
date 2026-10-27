@@ -195,3 +195,23 @@ describe("zoom / spin / pop", () => {
 		expect(at(k, "transform.rotate")).toEqual([[0, -80], [1, 10]]);
 	});
 });
+
+import { pickRandomMotions, RANDOM_MOTION_POOL } from "../presets";
+
+describe("pickRandomMotions", () => {
+	test("相同種子結果相同、數量正確、都在候選內", () => {
+		const a = pickRandomMotions({ count: 30, seed: 7 });
+		expect(a).toEqual(pickRandomMotions({ count: 30, seed: 7 }));
+		expect(a).toHaveLength(30);
+		for (const motion of a) expect(RANDOM_MOTION_POOL).toContain(motion);
+	});
+	test("相鄰不重複;不同種子結果不同", () => {
+		const a = pickRandomMotions({ count: 200, seed: 1 });
+		for (let i = 1; i < a.length; i++) expect(a[i]).not.toBe(a[i - 1]);
+		expect(pickRandomMotions({ count: 30, seed: 2 })).not.toEqual(pickRandomMotions({ count: 30, seed: 3 }));
+	});
+	test("數量為 0 或候選只有一個", () => {
+		expect(pickRandomMotions({ count: 0, seed: 1 })).toEqual([]);
+		expect(pickRandomMotions({ count: 3, seed: 1, pool: ["zoom"] })).toEqual(["zoom", "zoom", "zoom"]);
+	});
+});

@@ -26,6 +26,7 @@ import {
 } from "./pair-transition";
 import {
 	buildTransitionKeyframes,
+	pickRandomMotions,
 	type TransitionMotion,
 	type TransitionSide,
 } from "./presets";
@@ -105,9 +106,12 @@ export function TransitionsView() {
 	const apply = ({
 		motion,
 		sides,
+		randomSeed,
 	}: {
-		motion: TransitionMotion;
+		motion?: TransitionMotion;
 		sides: TransitionSide[];
+		/** 有值時每個片段各抽一種動畫(依開始時間排序,相鄰不重複) */
+		randomSeed?: number;
 	}) => {
 		const selected = editor.selection.getSelectedElements();
 		const items = editor.timeline.getElementsWithTracks({ elements: selected });
@@ -121,7 +125,18 @@ export function TransitionsView() {
 			typeof editor.timeline.upsertKeyframes
 		>[0]["keyframes"] = [];
 
-		for (const { track, element } of items) {
+		const ordered =
+			randomSeed === undefined
+				? items
+				: [...items].sort((a, b) => a.element.startTime - b.element.startTime);
+		const randomMotions =
+			randomSeed === undefined
+				? []
+				: pickRandomMotions({ count: ordered.length, seed: randomSeed });
+
+		for (const [index, { track, element }] of ordered.entries()) {
+			const itemMotion = randomSeed === undefined ? motion : randomMotions[index];
+			if (!itemMotion) continue;
 			const target = {
 				type: element.type,
 				params: element.params,
@@ -132,7 +147,7 @@ export function TransitionsView() {
 			for (const currentSide of sides) {
 				for (const keyframe of buildTransitionKeyframes({
 					target,
-					motion,
+					motion: itemMotion,
 					side: currentSide,
 					seconds,
 					canvas,
@@ -402,6 +417,18 @@ export function TransitionsView() {
 					</div>
 				</div>
 				<div className="flex flex-col gap-2">
+					<Button
+						variant="outline"
+						className="h-auto flex-col items-start gap-0.5 py-2"
+						onClick={() =>
+							apply({ sides: [side], randomSeed: Math.floor(Math.random() * 1_000_000) })
+						}
+					>
+						<span>隨機轉場(每個片段抽一種)</span>
+						<span className="text-muted-foreground text-left text-xs font-normal whitespace-normal">
+							選取多個片段(例如快剪切出的小段),每段在上面選的「進場 / 出場」位置各抽一種滑動、縮放、旋轉或彈出,相鄰不重複。長度太長會自動縮到片段一半。每按一次重抽;一次復原。
+						</span>
+					</Button>
 					<Button
 						variant="outline"
 						className="h-auto flex-col items-start gap-0.5 py-2"

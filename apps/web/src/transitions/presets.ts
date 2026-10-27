@@ -262,3 +262,48 @@ export function buildTransitionKeyframes({
 		}
 	}
 }
+
+/** 隨機轉場可抽的動畫(不含單純淡化,切點處淡化會變成一格一格閃黑) */
+export const RANDOM_MOTION_POOL: ReadonlyArray<TransitionMotion> = [
+	"slide-left",
+	"slide-right",
+	"slide-up",
+	"slide-down",
+	"zoom",
+	"spin",
+	"pop",
+];
+
+function mulberry32({ seed }: { seed: number }): () => number {
+	let state = seed >>> 0;
+	return () => {
+		state = (state + 0x6d2b79f5) >>> 0;
+		let t = state;
+		t = Math.imul(t ^ (t >>> 15), t | 1);
+		t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+	};
+}
+
+/**
+ * 為 count 個切點各抽一種動畫:同樣的種子結果相同,且相鄰兩個不會抽到一樣的。
+ */
+export function pickRandomMotions({
+	count,
+	seed,
+	pool = RANDOM_MOTION_POOL,
+}: {
+	count: number;
+	seed: number;
+	pool?: ReadonlyArray<TransitionMotion>;
+}): TransitionMotion[] {
+	if (count <= 0 || pool.length === 0) return [];
+	const random = mulberry32({ seed });
+	const result: TransitionMotion[] = [];
+	for (let i = 0; i < count; i++) {
+		const candidates =
+			pool.length > 1 && i > 0 ? pool.filter((motion) => motion !== result[i - 1]) : pool;
+		result.push(candidates[Math.floor(random() * candidates.length)]);
+	}
+	return result;
+}
