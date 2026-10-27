@@ -8,6 +8,7 @@ import type { BeatMode } from "@/media/beat-detect";
 import { mediaTimeFromSeconds, TICKS_PER_SECOND } from "@/wasm";
 import { isBeatBookmark, pickSplitTimes } from "@/timeline/bookmarks/beat-markers";
 import type { MediaTime } from "@/wasm";
+import { DEFAULT_MAX_CUTS, planAutoCut } from "@/timeline/auto-cut";
 
 /**
  * 節拍標記:分析時間軸的聲音,在重音或節拍位置加上橘色書籤。
@@ -35,6 +36,18 @@ export function BeatMarkersPopover({
 	const [minPieceSeconds, setMinPieceSeconds] = useState(0);
 	const [minGapSeconds, setMinGapSeconds] = useState(0.15);
 	const [quickShuffle, setQuickShuffle] = useState(true);
+	const [autoEvery, setAutoEvery] = useState(4);
+	const [autoMinSeconds, setAutoMinSeconds] = useState(1);
+	const [excludedAssetIds, setExcludedAssetIds] = useState<Set<string>>(new Set());
+	const lastAutoTrackRef = useRef<string | null>(null);
+	const mediaAssets = useEditor((e) => e.media.getAssets());
+	const visualAssets = mediaAssets.filter(
+		(asset) => asset.type === "video" || asset.type === "image",
+	);
+	const pickedAssets = visualAssets.filter((asset) => !excludedAssetIds.has(asset.id));
+	const videosWithoutProxy = pickedAssets.filter(
+		(asset) => asset.type === "video" && !asset.proxyFile,
+	).length;
 
 	const busy = progress !== null;
 
@@ -159,6 +172,66 @@ export function BeatMarkersPopover({
 			seed: Math.floor(Math.random() * 1_000_000),
 		});
 		toast.success(`已快剪成 ${pieces} 段${quickShuffle ? "並打散" : ""}(可一次復原)`);
+	};
+
+	const handleAutoCut = () => {
+		const scene = editor.scenes.getActiveScene();
+		const beats = scene.bookmarks
+			.filter((bookmark) => isBeatBookmark({ bookmark }))
+			.map((bookmark) => bookmark.time as number);
+		if (beats.length === 0) {
+			toast.error("還沒有節拍標記,請先分析");
+			return;
+		}
+		// 排滿的範圍 = 音訊軌上最後一個片段的結尾(音樂有多長就排多長)
+		let end = 0;
+		for (const track of scene.tracks.audio) {
+			for (const element of track.elements) {
+				end = Math.max(end, element.startTime + element.duration);
+			}
+		}
+		if (end <= 0) {
+			toast.error("音訊軌上要先有音樂,才知道要排多長");
+			return;
+		}
+		const sources = pickedAssets
+			.map((asset) => ({
+				id: asset.id,
+				kind: asset.type === "image" ? ("image" as const) : ("video" as const),
+				durationTicks: Math.round((asset.duration ?? 0) * TICKS_PER_SECOND),
+			}))
+			.filter((source) => source.kind === "image" || source.durationTicks > 0);
+		if (sources.length === 0) {
+			toast.error("素材庫裡沒有可用的影片或圖片(請至少勾選一個)");
+			return;
+		}
+		const plan = planAutoCut({
+			beats,
+			start: 0,
+			end,
+			sources,
+			every: autoEvery,
+			minGap: autoMinSeconds * TICKS_PER_SECOND,
+			seed: Math.floor(Math.random() * 1_000_000),
+		});
+		if (plan.pieces.length === 0) {
+			toast.error("排不出任何片段");
+			return;
+		}
+		const trackId = editor.timeline.autoCut({
+			pieces: plan.pieces,
+			assets: pickedAssets.map((asset) => ({ id: asset.id, name: asset.name })),
+			replaceTrackId: lastAutoTrackRef.current ?? undefined,
+		});
+		lastAutoTrackRef.current = trackId;
+		const notes = [
+			plan.thinnedCuts > 0 ? `切點超過上限 ${DEFAULT_MAX_CUTS},已自動減少` : null,
+			plan.shortfallCount > 0 ? `${plan.shortfallCount} 段素材太短,畫面有空隙` : null,
+		].filter(Boolean);
+		toast.success(
+			`已排入 ${plan.pieces.length} 段(再按一次會換一組並取代上次的結果,可一次復原)`,
+			notes.length > 0 ? { description: notes.join(";") } : undefined,
+		);
 	};
 
 	const handleReorder = (mode: "shuffle" | "reverse") => {
@@ -326,6 +399,73 @@ export function BeatMarkersPopover({
 							反轉順序
 						</Button>
 					</div>
+				</div>
+				<div className="border-t pt-3 flex flex-col gap-2">
+					<span className="text-sm font-medium">自動排片(剪 AMV)</span>
+					<span className="text-muted-foreground text-xs leading-relaxed">
+						依節拍標記,從下面勾選的素材隨機抽片段,在新的一軌排滿整首音樂(影片靜音、不連續抽同一支)。
+						要先分析節拍,且音訊軌上要有音樂。
+					</span>
+					<div className="flex items-center gap-1">
+						{[2, 4, 8].map((n) => (
+							<Button
+								key={n}
+								size="sm"
+								variant={autoEvery === n ? "default" : "outline"}
+								onClick={() => setAutoEvery(n)}
+							>
+								每 {n} 拍
+							</Button>
+						))}
+					</div>
+					<span className="text-muted-foreground text-xs">最短片段</span>
+					<div className="flex flex-wrap gap-1">
+						{[0, 1, 2, 3].map((value) => (
+							<Button
+								key={value}
+								size="sm"
+								variant={autoMinSeconds === value ? "default" : "outline"}
+								onClick={() => setAutoMinSeconds(value)}
+							>
+								{value === 0 ? "不限" : `${value} 秒`}
+							</Button>
+						))}
+					</div>
+					<div className="max-h-32 overflow-y-auto rounded-md border p-2">
+						{visualAssets.length === 0 ? (
+							<span className="text-muted-foreground text-xs">素材庫裡還沒有影片或圖片</span>
+						) : (
+							visualAssets.map((asset) => (
+								<label key={asset.id} className="flex items-center gap-2 py-0.5 text-xs">
+									<input
+										type="checkbox"
+										checked={!excludedAssetIds.has(asset.id)}
+										onChange={(event) =>
+											setExcludedAssetIds((previous) => {
+												const next = new Set(previous);
+												if (event.target.checked) next.delete(asset.id);
+												else next.add(asset.id);
+												return next;
+											})
+										}
+									/>
+									<span className="truncate">{asset.name}</span>
+								</label>
+							))
+						)}
+					</div>
+					{videosWithoutProxy > 0 && (
+						<span className="text-xs text-amber-600">
+							有 {videosWithoutProxy} 支影片還沒建立代理檔;片段很多時預覽會吃力,建議先到素材庫對它們「建立代理檔」。
+						</span>
+					)}
+					<Button
+						size="sm"
+						disabled={busy || beatCount === 0 || pickedAssets.length === 0}
+						onClick={handleAutoCut}
+					>
+						自動排片
+					</Button>
 				</div>
 				{(summary || beatCount > 0) && (
 					<p className="text-muted-foreground text-xs">

@@ -43,6 +43,7 @@ import {
 	MoveElementCommand,
 	ReorderElementsCommand,
 	QuickCutCommand,
+	AutoCutCommand,
 	TracksSnapshotCommand,
 	UpsertKeyframeCommand,
 	RemoveKeyframeCommand,
@@ -267,6 +268,13 @@ export class TimelineManager {
 		const command = new QuickCutCommand(params);
 		this.editor.command.execute({ command });
 		return command.getPieceCount();
+	}
+
+	/** 自動排片:新增一條影片軌並放入規劃好的片段,一個復原步驟;回傳新軌道 id */
+	autoCut(params: ConstructorParameters<typeof AutoCutCommand>[0]): string | null {
+		const command = new AutoCutCommand(params);
+		this.editor.command.execute({ command });
+		return command.getTrackId();
 	}
 
 	getTotalDuration(): MediaTime {

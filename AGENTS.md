@@ -43,14 +43,15 @@
 | 交叉溶解、推移 / 滑動擦除 / 縮放 | `transitions/{cross-dissolve,pair-transition}.ts` | 轉場面板「兩段之間」 | 3.14 |
 | 進度式擦除轉場(線性 / 圓形光圈 / 時鐘) | `wipe.wgsl`、`effects/definitions/wipe.ts`、`transitions/wipe-transition.ts`、`ApplyWipeCommand` | 轉場面板「兩段之間的擦除」、特效「擦除」 | 3.18 |
 | 節拍標記、依節拍分割、重排、一鍵快剪 | `media/beat-detect.ts`、`timeline/{reorder,bookmarks/beat-markers}.ts`、`QuickCutCommand` | 時間軸工具列音符按鈕 | 3.15 |
+| 自動排片(依節拍從素材庫抽片段排滿整首歌) | `timeline/auto-cut.ts`、`AutoCutCommand` | 節拍面板「自動排片」 | 3.19 |
 | 音訊淡入淡出、版本紀錄、代理檔、備份 / 重新連結 | 見各章節 | 屬性面板 / 素材庫 / 專案選單 | 3.6 ~ 3.8、3.12 |
 | LRC 歌詞匯入、點拍同步歌詞 | `subtitles/{lrc,timed-lines}.ts`、`subtitles/components/lyrics-tap.tsx` | 字幕面板「匯入」/「點拍同步歌詞」 | 4.1 |
 | 左側面板細捲軸 | `PanelView`(`base-panel.tsx`) | 所有左側面板 | 3.17 |
 
 ### 尚未做 / 可以接著做(都是使用者看過、評估過的)
 
-- **自動從素材庫挑片段排滿整首歌**(BeatEdit、mvmake、CapCut 自動剪輯的做法:節拍標記 + 依標記自動排素材)。
-  目前的「一鍵快剪」只處理**使用者已經選好、同一條軌道**的素材;要做就得自己建立新片段(trim / retime / 連動音訊的計算要小心),且選片規則很吃品味。
+- **自動排片的第二版**:現在是最小版本(隨機抽、不連續重複、不做智慧選片、不變速)。可以接著做:素材比切段短時變速補長、依素材亮度 / 運動量選片、保留使用者鎖定的片段。
+
 - **擦除的進階版**:現在的擦除是 shader 特效(進度可做關鍵影格),遮罩參數仍不能做關鍵影格;若要「形狀遮罩」式擦除才需要讓遮罩可動畫(動到專案格式,要寫遷移)。
   擦除目前只處理畫面,聲音的交叉淡化要另外用「交叉溶解」或音訊淡化。
 - **節拍面板拆成「分析」與「剪輯」兩個分頁**:現在內容很長(已加捲動),使用者可能會想拆。
@@ -137,6 +138,12 @@
   套用(`wipe-transition.ts` 純函式 + `ApplyWipeCommand`):只對重疊時**在上層**的那一段加特效並對 `effects.<id>.params.progress` 做關鍵影格
   (上層是前一段:0 → 100;是後一段:100 → 0 且反向旗標取反,讓前進方向一致)。特效 id 要執行後才知道,所以 `ApplyWipeCommand` 像 `QuickCutCommand` 直接呼叫子指令的 `execute()`、undo 反向還原,一個復原步驟。
   再按一次會再疊一個擦除特效(可在特效屬性刪掉舊的)。
+- **自動排片**(`timeline/auto-cut.ts` 的 `planAutoCut`,純函式,有測試):切點 = `pickSplitTimes`(每 2 / 4 / 8 拍、最短片段),上限 `DEFAULT_MAX_CUTS`(150,超過就隔幾個取一個並回報);
+  每段用固定種子的亂數從素材池抽一支(不連續同一支,只有一支才重複),影片的入點隨機、出點不超過素材長度(trimStart + 長度 + trimEnd = 素材長度),
+  太短的素材不會被抽中,全部都太短時用最長那支並縮短(畫面留空隙,回報 `shortfallCount`);圖片任意長度、入點 0。
+  `AutoCutCommand`:新增一條影片軌(`AddTrackCommand`,index 0)後**只更新一次時間軸狀態**放入全部片段(不是每個片段一個 `InsertElementCommand`,避免 N 次場景重建),
+  影片 `isSourceAudioEnabled: false`(靜音);`replaceTrackId` 讓「再按一次」取代上次的結果而不是越疊越多;一個復原步驟。
+  排滿的範圍 = 音訊軌最後一個片段的結尾;介面在節拍面板,素材清單是素材庫裡的影片 / 圖片(可勾選),沒建立代理檔的影片會提示。
 - **隨機轉場**(`transitions/presets.ts` 的 `pickRandomMotions`,純函式,有測試):對選取的多個片段(依開始時間排序)各抽一種進場 / 出場動畫
   (滑入 ×4、縮放、旋轉、彈出;**不含單純淡化**,否則切點處會一格一格閃黑),相鄰不重複、同種子可重現。
   不需要重疊軌道,直接用單一片段的進出場關鍵影格,所以可以套在快剪切出來的小段上;長度仍受「不超過片段一半」限制。
