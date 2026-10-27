@@ -182,7 +182,11 @@ export function BeatMarkersPopover({
 	return (
 		<Popover open={open} onOpenChange={onOpenChange}>
 			{children}
-			<PopoverContent className="flex w-72 flex-col gap-3" align="end">
+			<PopoverContent
+				className="flex max-h-[var(--radix-popover-content-available-height)] w-72 flex-col gap-3 overflow-y-auto"
+				align="end"
+				collisionPadding={8}
+			>
 				<div className="text-sm font-medium">節拍標記</div>
 				<p className="text-muted-foreground text-xs leading-relaxed">
 					分析時間軸的聲音,在節奏點加上橘色書籤,剪片段時會自動吸附。
