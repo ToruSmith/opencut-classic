@@ -26,6 +26,7 @@ import { decodeAudioToFloat32 } from "@/media/audio";
 import { buildCaptionChunks } from "@/transcription/caption";
 import { insertCaptionChunksAsTextTrack } from "@/subtitles/insert";
 import { parseSubtitleFile } from "@/subtitles/parse";
+import { LyricsTap } from "@/subtitles/components/lyrics-tap";
 import { Spinner } from "@/components/ui/spinner";
 import {
 	Section,
@@ -228,7 +229,7 @@ export function Captions() {
 				error:
 					error instanceof Error
 						? error.message === "Unsupported subtitle format"
-							? "不支援的字幕格式(只支援 .srt 與 .ass)"
+							? "不支援的字幕格式(只支援 .srt、.ass 與 .lrc)"
 							: error.message
 						: "發生未知的錯誤",
 			});
@@ -306,7 +307,7 @@ export function Captions() {
 			<input
 				ref={fileInputRef}
 				type="file"
-				accept=".srt,.ass"
+				accept=".srt,.ass,.lrc"
 				className="hidden"
 				onChange={(event) => void handleFileChange({ event })}
 			/>
@@ -335,6 +336,8 @@ export function Captions() {
 							</Select>
 						</SectionField>
 					</SectionFields>
+
+					<LyricsTap />
 
 					<div className="mt-auto flex w-full flex-col gap-2">
 						<Button

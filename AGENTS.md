@@ -43,6 +43,7 @@
 | 交叉溶解、推移 / 滑動擦除 / 縮放 | `transitions/{cross-dissolve,pair-transition}.ts` | 轉場面板「兩段之間」 | 3.14 |
 | 節拍標記、依節拍分割、重排、一鍵快剪 | `media/beat-detect.ts`、`timeline/{reorder,bookmarks/beat-markers}.ts`、`QuickCutCommand` | 時間軸工具列音符按鈕 | 3.15 |
 | 音訊淡入淡出、版本紀錄、代理檔、備份 / 重新連結 | 見各章節 | 屬性面板 / 素材庫 / 專案選單 | 3.6 ~ 3.8、3.12 |
+| LRC 歌詞匯入、點拍同步歌詞 | `subtitles/{lrc,timed-lines}.ts`、`subtitles/components/lyrics-tap.tsx` | 字幕面板「匯入」/「點拍同步歌詞」 | 4.1 |
 | 左側面板細捲軸 | `PanelView`(`base-panel.tsx`) | 所有左側面板 | 3.17 |
 
 ### 尚未做 / 可以接著做(都是使用者看過、評估過的)
@@ -205,6 +206,12 @@
   特效面板上方點一下就在播放頭放入;每層一個特效片段,用 `timeline.insertElements`(`BatchCommand`)合成一個復原步驟,
   自動放軌(重疊的會分到不同軌道)。參數只寫覆寫值;新增組合時測試會檢查特效類型、參數 key 與範圍。
 - **轉場(進出場動畫)**:`transitions/presets.ts` 是純函式,把動畫展開成關鍵影格(動畫基準值要從 `element.params` 讀,不是 `element.opacity` 這類不存在的欄位)。測試在 `transitions/__tests__/`。
+- **LRC / 點拍同步**(`subtitles/lrc.ts`、`timed-lines.ts`,純函式,有測試):`parseLrc` 接在 `parse.ts` 的 `case "lrc"`。
+  每句結束 = 下一個時間點(含空文字行的結束標記),最後一句 4 秒,單句最長 10 秒(`LAST_LINE_SECONDS` / `MAX_LINE_SECONDS`);
+  同一時間點的多行(原文 + 翻譯)合併成一則;`[offset:+ms]` 讓字幕提早;逐字時間戳 `<mm:ss.xx>` 去掉只留整句。
+  點拍(`lyrics-tap.tsx`):時間取自 `editor.playback.getCurrentTime()` 再減「按鍵補償」(預設 0.1 秒),按鍵只寫進 ref,
+  在 **window 捕獲階段**攔空白 / 退格(全域快捷鍵掛在 document,不攔會變成播放 / 暫停);完成時用 `insertCaptionChunksAsTextTrack` 一次寫入(單一復原步驟)。
+  注意:播放頭是 `requestAnimationFrame` + `performance.now` 推算的,不是直接讀音訊時鐘,所以點拍精度受補償值影響。
 - 字幕解析(`subtitles/`)、字幕切段(`transcription/caption.ts`)也都是純函式,有測試;中文沒有空格,按標點與字數(12 字)切。
 
 ## WASM 體積(已量測,2026-10)
