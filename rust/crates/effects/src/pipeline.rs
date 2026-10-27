@@ -39,6 +39,8 @@ const GLITCH_SHADER_ID: &str = "glitch";
 const GLITCH_SHADER_SOURCE: &str = include_str!("shaders/glitch.wgsl");
 const MIRROR_SHADER_ID: &str = "mirror";
 const MIRROR_SHADER_SOURCE: &str = include_str!("shaders/mirror.wgsl");
+const WIPE_SHADER_ID: &str = "wipe";
+const WIPE_SHADER_SOURCE: &str = include_str!("shaders/wipe.wgsl");
 
 /// 需要第二張貼圖(group 2)的 shader
 fn requires_texture(shader: &str) -> bool {
@@ -251,6 +253,10 @@ impl EffectPipeline {
             (
                 MIRROR_SHADER_ID.to_string(),
                 build_pipeline("effects-mirror", MIRROR_SHADER_SOURCE),
+            ),
+            (
+                WIPE_SHADER_ID.to_string(),
+                build_pipeline("effects-wipe", WIPE_SHADER_SOURCE),
             ),
             (
                 LUT_SHADER_ID.to_string(),
@@ -687,6 +693,33 @@ fn pack_effect_uniforms(
                 read_number_uniform(pass, "u_flip")?,
                 0.0,
                 0.0,
+            ],
+        });
+    }
+
+    if shader == WIPE_SHADER_ID {
+        reject_unknown_uniforms(
+            pass,
+            &[
+                "u_mode",
+                "u_progress",
+                "u_softness",
+                "u_angle",
+                "u_center_x",
+                "u_center_y",
+            ],
+        )?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [
+                read_number_uniform(pass, "u_center_x")?,
+                read_number_uniform(pass, "u_center_y")?,
+            ],
+            scalars: [
+                read_number_uniform(pass, "u_mode")?,
+                read_number_uniform(pass, "u_progress")?,
+                read_number_uniform(pass, "u_softness")?,
+                read_number_uniform(pass, "u_angle")?,
             ],
         });
     }

@@ -2,6 +2,7 @@ import { effectsRegistry } from "../registry";
 import { blurEffectDefinition } from "./blur";
 import { chromaKeyEffectDefinition } from "./chroma-key";
 import { lutEffectDefinition } from "./lut";
+import { wipeEffectDefinition } from "./wipe";
 import {
 	cameraShakeEffectDefinition,
 	glitchEffectDefinition,
@@ -55,6 +56,7 @@ const defaultEffects = [
 	zoomBlurEffectDefinition,
 	glitchEffectDefinition,
 	mirrorEffectDefinition,
+	wipeEffectDefinition,
 ];
 
 export function registerDefaultEffects(): void {

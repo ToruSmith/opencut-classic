@@ -24,6 +24,8 @@ import {
 	type PairDirection,
 	type PairKind,
 } from "./pair-transition";
+import { planWipeForItem } from "./wipe-transition";
+import type { WipeKind } from "@/effects/definitions/wipe";
 import {
 	buildTransitionKeyframes,
 	pickRandomMotions,
@@ -97,11 +99,37 @@ const PAIR_DIRECTIONS: Array<{ direction: PairDirection; label: string }> = [
 	{ direction: "down", label: "↓ 向下" },
 ];
 
+const WIPE_KINDS_UI: Array<{ kind: WipeKind; label: string; hint: string }> = [
+	{
+		kind: "linear",
+		label: "線性擦除",
+		hint: "上層那一段沿著選的方向被擦掉,露出下面(出場),或被擦開(進場);有柔邊",
+	},
+	{
+		kind: "iris",
+		label: "圓形光圈",
+		hint: "從畫面中心打開一個圓,越開越大",
+	},
+	{
+		kind: "clock",
+		label: "時鐘掃過",
+		hint: "像時鐘指針從 12 點鐘順時針掃一圈",
+	},
+];
+
+const WIPE_SOFTNESS = [
+	{ value: 0, label: "硬邊" },
+	{ value: 20, label: "柔邊" },
+	{ value: 60, label: "很柔" },
+];
+
 export function TransitionsView() {
 	const editor = useEditor();
 	const [seconds, setSeconds] = useState(0.5);
 	const [side, setSide] = useState<TransitionSide>("in");
 	const [pairDirection, setPairDirection] = useState<PairDirection>("left");
+	const [wipeSoftness, setWipeSoftness] = useState(20);
+	const [wipeReverse, setWipeReverse] = useState(false);
 
 	const apply = ({
 		motion,
@@ -309,6 +337,56 @@ export function TransitionsView() {
 		toast.success(`已套用轉場(${overlapSeconds.toFixed(2)} 秒)`);
 	};
 
+	const applyWipe = (kind: WipeKind) => {
+		const selected = editor.selection.getSelectedElements();
+		if (selected.length !== 1) {
+			toast.error("請在時間軸選取一段片段(前一段或後一段都可以)");
+			return;
+		}
+		const plan = planPairTransition({
+			tracks: editor.scenes.getActiveScene().tracks,
+			trackId: selected[0].trackId,
+			elementId: selected[0].elementId,
+		});
+		if (!plan.ok) {
+			toast.error(plan.reason);
+			return;
+		}
+		const upperItem = plan.items.find((candidate) => candidate.upper);
+		const target = upperItem
+			? editor.timeline.getElementsWithTracks({
+					elements: [{ trackId: upperItem.trackId, elementId: upperItem.elementId }],
+				})[0]
+			: undefined;
+		if (!upperItem || !target || target.element.type === "audio") {
+			toast.error("選取的項目不支援這個轉場");
+			return;
+		}
+		const wipe = planWipeForItem({
+			kind,
+			direction: pairDirection,
+			item: upperItem,
+			softness: wipeSoftness,
+			reverse: wipeReverse,
+			durationSeconds: mediaTimeToSeconds({ time: target.element.duration }),
+			overlapSeconds: plan.overlap / TICKS_PER_SECOND,
+		});
+		if (!wipe) {
+			toast.error("選取的項目不支援這個轉場");
+			return;
+		}
+		editor.timeline.applyWipeTransition({
+			trackId: upperItem.trackId,
+			elementId: upperItem.elementId,
+			params: wipe.params,
+			progressKeyframes: wipe.keyframes.map((keyframe) => ({
+				time: mediaTimeFromSeconds({ seconds: keyframe.seconds }),
+				value: keyframe.value,
+			})),
+		});
+		toast.success(`已套用擦除(${(plan.overlap / TICKS_PER_SECOND).toFixed(2)} 秒)`);
+	};
+
 	const buildAudioFadeUpdates = ({ actions }: { actions: DissolveAction[] }) => {
 		const updates: Array<{ trackId: string; elementId: string; params: ParamValues }> = [];
 		for (const action of actions) {
@@ -380,6 +458,46 @@ export function TransitionsView() {
 					))}
 					<span className="text-muted-foreground text-xs">
 						方向是畫面內容移動的方向(縮放不分方向)。
+					</span>
+				</div>
+				<div className="flex flex-col gap-2">
+					<span className="text-muted-foreground text-xs">
+						兩段之間的擦除(要重疊在不同軌道;方向用上面的箭頭 = 擦除前進方向)
+					</span>
+					<div className="flex flex-wrap gap-1">
+						{WIPE_SOFTNESS.map((option) => (
+							<Button
+								key={option.value}
+								size="sm"
+								variant={wipeSoftness === option.value ? "default" : "outline"}
+								onClick={() => setWipeSoftness(option.value)}
+							>
+								{option.label}
+							</Button>
+						))}
+						<Button
+							size="sm"
+							variant={wipeReverse ? "default" : "outline"}
+							onClick={() => setWipeReverse((value) => !value)}
+						>
+							反向
+						</Button>
+					</div>
+					{WIPE_KINDS_UI.map((k) => (
+						<Button
+							key={k.kind}
+							variant="outline"
+							className="h-auto flex-col items-start gap-0.5 py-2"
+							onClick={() => applyWipe(k.kind)}
+						>
+							<span>{k.label}</span>
+							<span className="text-muted-foreground text-left text-xs font-normal whitespace-normal">
+								{k.hint}
+							</span>
+						</Button>
+					))}
+					<span className="text-muted-foreground text-xs">
+						在上層那一段加「擦除」特效並對進度做關鍵影格,之後可在特效屬性裡調整;轉場以外的時間特效不會多跑一個 pass。
 					</span>
 				</div>
 				<div className="flex flex-col gap-2">

@@ -25,6 +25,7 @@ const SHADERS: &[(&str, &str)] = &[
     ("zoom_blur", include_str!("shaders/zoom_blur.wgsl")),
     ("glitch", include_str!("shaders/glitch.wgsl")),
     ("mirror", include_str!("shaders/mirror.wgsl")),
+    ("wipe", include_str!("shaders/wipe.wgsl")),
 ];
 
 #[test]

@@ -49,6 +49,7 @@ import {
 	RetimeKeyframeCommand,
 	UpdateScalarKeyframeCurveCommand,
 	AddClipEffectCommand,
+	ApplyWipeCommand,
 	DeleteFreeformPathMaskPointsCommand,
 	InsertFreeformPathMaskPointCommand,
 	RemoveClipEffectCommand,
@@ -363,6 +364,28 @@ export class TimelineManager {
 		} else {
 			command.execute();
 		}
+	}
+
+	/** 加「擦除」特效並對進度做關鍵影格(單一復原步驟) */
+	applyWipeTransition({
+		trackId,
+		elementId,
+		params,
+		progressKeyframes,
+	}: {
+		trackId: string;
+		elementId: string;
+		params: ParamValues;
+		progressKeyframes: Array<{ time: MediaTime; value: number }>;
+	}): void {
+		this.editor.command.execute({
+			command: new ApplyWipeCommand({
+				trackId,
+				elementId,
+				params,
+				progressKeyframes,
+			}),
+		});
 	}
 
 	addClipEffect({

@@ -230,9 +230,25 @@ FreeCut(音訊 EQ)。
 |---|---|---|---|---|---|
 | 前置 | 節拍真實音樂驗證 + 手動微調 | 改做 | 驗證只能請 Toru 實測:已列進 `qa-checklist.md` 3.15(3~5 首不同類型);手動微調書籤(拖動 / 補點)這輪不做,動到書籤互動較大,排在提議 2 之後再評估 | S | 檢查清單 2026-10-27 |
 | 1 | LRC + 點拍同步 | 做 | 字幕目錄確實沒有 LRC;`parse.ts` 一個 `case` 就接上,點拍只在本機 ref 記時間、完成時 `BatchCommand` 一次寫入 | S + M | 2026-10-27 / CI 結果見下方完成紀錄 |
-| 2 | 進度式擦除轉場 | 做 | 已確認特效參數可做關鍵影格(`effects.<id>.params.<key>`,`resolveEffectParamsAtTime`);片段自帶 `effects[]` 作用在該片段自己的全畫面圖層,把 alpha 乘上遮罩即可露出下層,不動專案格式、不需遷移。需新增「加特效 + 關鍵影格」的單一復原指令(特效 id 要先決定好) | M | |
+| 2 | 進度式擦除轉場 | 做 | 已確認特效參數可做關鍵影格(`effects.<id>.params.<key>`,`resolveEffectParamsAtTime`);片段自帶 `effects[]` 作用在該片段自己的全畫面圖層,把 alpha 乘上遮罩即可露出下層,不動專案格式、不需遷移。需新增「加特效 + 關鍵影格」的單一復原指令(特效 id 要先決定好) | M | 2026-10-27 / CI 結果見下方完成紀錄 |
 | 3 | 自動排滿整首歌(簡化版) | 做(下一輪) | 價值最高但要自己建立片段(trim / 連動音訊),卡頓風險最大,本輪只做前兩項 | M~L | — |
 | 4 | 逐字 / 逐句字幕動畫 | 改做 | 只做「卡拉 OK 填色」(兩個疊層字幕 + 提議 2 的線性擦除);逐字出現不做(中文逐字 = 片段數暴增) | M | — |
 | 5 | 匯出範圍 / 綠幕 | 改做 | 已查:`scene-exporter.ts` 沒有範圍匯出(有取消);先做範圍匯出,綠幕 / 黑底之後再評估合成器能否直接換背景色 | M | — |
 | 6 | 音訊 ducking / EQ | 改做 | 只做 ducking(乘進 `resolveEffectiveAudioGain`,預覽 / 匯出自動套用);EQ 預覽與匯出要兩套實作且須一致,風險高,不做 | M | — |
 | 加 | (自行加入評估)圖片「緩慢推近 / 平移」(Ken Burns,Kdenlive、Shotcut、OpenShot、CapCut 都有) | 做(之後,不在本輪) | 純關鍵影格(縮放 + 位置),不增加任何 shader pass 與每格配置,預覽成本等同現有動畫;對歌詞 / 相簿影片幫助大。純函式 `kenBurnsKeyframes({ ... })` + 轉場面板一個按鈕即可,規模 S。本輪依文件只做前兩項,所以只評估不動工 | S | — |
+
+## 完成紀錄
+
+### 提議 1:LRC + 點拍同步(2026-10-27)
+- 規則照文件建議的預設,沒有調整:最後一句 4 秒、單句最長 10 秒、`[offset]` 正值提早、空文字行 = 結束上一句、逐字時間戳去掉。額外決定:同一時間點的多行(原文 + 翻譯)合併成一則;秒數 ≥ 60 的壞行略過並計入 `skippedCueCount`;offset 讓起點變負的句子略過並警告。
+- 點拍:時間取自 `editor.playback.getCurrentTime()`(播放頭是 rAF + `performance.now` 推算,**不是**直接讀音訊時鐘,文件原先假設的「音訊時鐘」在這個程式裡不存在),再扣可調的「按鍵補償」(預設 0.1 秒)。按鍵只寫 ref;空白 / 退格在 window 捕獲階段攔下以避開全域「空白 = 播放 / 暫停」。多按一次空白 = 最後一句的結束點。
+- 效能:匯入走既有 `insertCaptionChunksAsTextTrack`(`BatchCommand`,單一復原步驟)。**未實測**預覽影響,請 Toru 依 qa-checklist 4.1 確認。
+- 測試:`subtitles/__tests__/lrc.test.ts` 12 則(本機 bun 通過)。CI:Deploy workflow 全綠。
+
+### 提議 2:進度式擦除轉場(2026-10-27)
+- 確認:特效參數可做關鍵影格(`effects.<id>.params.<key>`,渲染時 `resolveEffectParamsAtTime`),`resolveEffectParamsAtTime` 每格只建立一個結果物件(逐參數求值,沒有額外配置),不需遷移、不動專案格式。
+- 一支 shader 三種模式(線性 / 光圈 / 時鐘,模式 +3 = 反向),一個 pass,8 個浮點數內。只對重疊時在上層的那一段加特效,下層不加。
+- 空轉:`buildPasses` 在進度為 0 時回傳空陣列,轉場以外的時間不跑 pass。片段仍帶一組空的 effectPassGroups,是否有額外圖層開銷**未實測**。
+- 聲音:這次沒有做擦除的聲音交叉淡化(要的話另按交叉溶解 / 音訊淡化)。
+- **畫面未驗證**:shader 只能靠 CI 的 naga 驗證語法;三種擦除的起點、終點、柔邊、方向都要 Toru 實機確認(qa-checklist 3.18)。`__renderPerf` 數字也**未實測**。
+- 測試:`effects/__tests__/wipe.test.ts`、`transitions/__tests__/wipe-transition.test.ts`(本機 bun 通過);`shader_tests.rs` 已加入 wipe。

@@ -3,3 +3,4 @@ export { RemoveClipEffectCommand } from "./remove-effect";
 export { ToggleClipEffectCommand } from "./toggle-effect";
 export { UpdateClipEffectParamsCommand } from "./update-effect-params";
 export { ReorderClipEffectsCommand } from "./reorder-effect";
+export { ApplyWipeCommand } from "./apply-wipe";
