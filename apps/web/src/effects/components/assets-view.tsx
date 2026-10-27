@@ -8,14 +8,71 @@ import { effectPreviewService } from "@/services/renderer/effect-preview";
 import { useEditor } from "@/editor/use-editor";
 import { buildEffectElement } from "@/timeline/element-utils";
 import type { EffectDefinition } from "@/effects/types";
+import { EFFECT_PRESETS, type EffectPreset } from "@/effects/presets";
+import { mediaTimeFromSeconds } from "@/wasm/media-time";
 
 export function EffectsView() {
 	const effects = effectsRegistry.getAll();
 
 	return (
 		<PanelView title="特效">
-			<EffectsGrid effects={effects} />
+			<div className="flex flex-col gap-4">
+				<PresetList />
+				<EffectsGrid effects={effects} />
+			</div>
 		</PanelView>
+	);
+}
+
+function PresetList() {
+	const editor = useEditor();
+
+	const handleApply = useCallback(
+		(preset: EffectPreset) => {
+			const startTime = editor.playback.getCurrentTime();
+			const duration =
+				preset.durationSeconds === undefined
+					? undefined
+					: mediaTimeFromSeconds({ seconds: preset.durationSeconds });
+			const items = preset.layers
+				.filter((layer) => effectsRegistry.has(layer.effectType))
+				.map((layer) => {
+					const element = buildEffectElement({
+						effectType: layer.effectType,
+						startTime,
+						duration,
+					});
+					return {
+						placement: { mode: "auto", trackType: "effect" } as const,
+						element: {
+							...element,
+							params: { ...element.params, ...layer.params },
+						},
+					};
+				});
+			editor.timeline.insertElements({ items });
+		},
+		[editor],
+	);
+
+	return (
+		<div className="flex flex-col gap-2">
+			<p className="text-xs text-muted-foreground">組合(點一下,在播放頭位置放入多個特效)</p>
+			<div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}>
+				{EFFECT_PRESETS.map((preset) => (
+					<button
+						key={preset.id}
+						type="button"
+						title={preset.description}
+						onClick={() => handleApply(preset)}
+						className="flex flex-col gap-1 rounded-md border bg-card p-2 text-left hover:bg-accent"
+					>
+						<span className="text-sm font-medium">{preset.name}</span>
+						<span className="text-xs text-muted-foreground">{preset.description}</span>
+					</button>
+				))}
+			</div>
+		</div>
 	);
 }
 

@@ -88,6 +88,16 @@ export class TimelineManager {
 		this.editor.command.execute({ command });
 	}
 
+	/** 一次插入多個元素,合成一個復原步驟(例如效果組合) */
+	insertElements({ items }: { items: InsertElementParams[] }): void {
+		if (items.length === 0) return;
+		const commands = items.map(
+			({ element, placement }) => new InsertElementCommand({ element, placement }),
+		);
+		const command = commands.length === 1 ? commands[0] : new BatchCommand(commands);
+		this.editor.command.execute({ command });
+	}
+
 	updateElementTrim({
 		elementId,
 		trimStart,

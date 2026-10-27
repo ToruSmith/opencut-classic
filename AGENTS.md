@@ -139,6 +139,9 @@
   - 效果面板會依參數的 `dependencies` 隱藏用不到的欄位。
   - 特效片段的名稱:新建時用定義的中文名稱;時間軸顯示用 `effects/display-name.ts`,
     舊版自動產生的英文名稱(`Film-grain`)會改顯示中文,使用者改過的名稱不變。
+- **效果組合**(`effects/presets.ts`,純資料,有測試):把幾個特效打包(衝擊、復古膠卷、電影感、賽博故障、夢幻柔光),
+  特效面板上方點一下就在播放頭放入;每層一個特效片段,用 `timeline.insertElements`(`BatchCommand`)合成一個復原步驟,
+  自動放軌(重疊的會分到不同軌道)。參數只寫覆寫值;新增組合時測試會檢查特效類型、參數 key 與範圍。
 - **轉場(進出場動畫)**:`transitions/presets.ts` 是純函式,把動畫展開成關鍵影格(動畫基準值要從 `element.params` 讀,不是 `element.opacity` 這類不存在的欄位)。測試在 `transitions/__tests__/`。
 - 字幕解析(`subtitles/`)、字幕切段(`transcription/caption.ts`)也都是純函式,有測試;中文沒有空格,按標點與字數(12 字)切。
 
