@@ -47,7 +47,6 @@ import {
 	KaraokeCommand,
 	CutTransitionCommand,
 	SpeedRampCommand,
-	DuckingCommand,
 	TracksSnapshotCommand,
 	UpsertKeyframeCommand,
 	RemoveKeyframeCommand,
@@ -303,16 +302,6 @@ export class TimelineManager {
 		const command = new SpeedRampCommand(params);
 		this.editor.command.execute({ command });
 		return { pieces: command.getPieceCount(), error: command.getError() };
-	}
-
-	/** 自動壓低背景音;回傳套用的音樂片段數(0 = 沒套用,原因在 error) */
-	applyDucking(params: ConstructorParameters<typeof DuckingCommand>[0]): {
-		applied: number;
-		error: string | null;
-	} {
-		const command = new DuckingCommand(params);
-		this.editor.command.execute({ command });
-		return { applied: command.getAppliedCount(), error: command.getError() };
 	}
 
 	getTotalDuration(): MediaTime {
