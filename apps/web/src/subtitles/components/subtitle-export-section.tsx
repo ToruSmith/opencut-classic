@@ -2,6 +2,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useEditor } from "@/editor/use-editor";
 import { formatLrc, formatSrt } from "@/subtitles/serialize";
+import type { TimelineElement } from "@/timeline";
 import type { CaptionChunk } from "@/transcription/types";
 import { downloadBlob } from "@/utils/browser";
 import { mediaTimeToSeconds } from "@/wasm";
@@ -23,7 +24,7 @@ export function SubtitleExportSection() {
 			selected.length > 0
 				? selected
 				: [editor.scenes.getActiveScene().tracks.main, ...editor.scenes.getActiveScene().tracks.overlay]
-						.flatMap((track) => track.elements)
+						.flatMap((track): TimelineElement[] => [...track.elements])
 						.filter((element) => element.type === "text");
 		return source.map((element) => ({
 			text: String(element.params.content ?? ""),
