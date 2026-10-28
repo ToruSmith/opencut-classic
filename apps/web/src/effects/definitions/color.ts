@@ -45,8 +45,17 @@ function colorEffect({
 					}),
 				},
 			],
+			// 換算後每個 uniform 都等於中性值時,shader 是原圖照抄:不送 pass(切點轉場的閃白靠這個)
+			skipWhen: ({ effectParams }) => isNeutralColor({ values: uniforms(effectParams as Record<string, unknown>) }),
 		},
 	};
+}
+
+export function isNeutralColor({ values }: { values: Partial<typeof NEUTRAL> }): boolean {
+	return (Object.keys(values) as Array<keyof typeof NEUTRAL>).every((key) => {
+		const value = values[key];
+		return typeof value === "number" && Number.isFinite(value) && Math.abs(value - NEUTRAL[key]) < 1e-6;
+	});
 }
 
 export const colorAdjustEffectDefinition = colorEffect({

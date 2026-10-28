@@ -26,6 +26,7 @@ const SHADERS: &[(&str, &str)] = &[
     ("glitch", include_str!("shaders/glitch.wgsl")),
     ("mirror", include_str!("shaders/mirror.wgsl")),
     ("wipe", include_str!("shaders/wipe.wgsl")),
+    ("cut_motion", include_str!("shaders/cut_motion.wgsl")),
 ];
 
 #[test]

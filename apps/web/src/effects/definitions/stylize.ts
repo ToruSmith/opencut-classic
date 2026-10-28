@@ -90,6 +90,10 @@ export const chromaticAberrationEffectDefinition: EffectDefinition = {
 		},
 	],
 	renderer: {
+		skipWhen: ({ effectParams }) => {
+			const value = Number((effectParams as Record<string, unknown>).amount ?? 6);
+			return Number.isFinite(value) && value <= 0;
+		},
 		passes: [
 			{
 				shader: CHROMATIC_ABERRATION_SHADER,

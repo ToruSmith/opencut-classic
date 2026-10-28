@@ -41,6 +41,8 @@ const MIRROR_SHADER_ID: &str = "mirror";
 const MIRROR_SHADER_SOURCE: &str = include_str!("shaders/mirror.wgsl");
 const WIPE_SHADER_ID: &str = "wipe";
 const WIPE_SHADER_SOURCE: &str = include_str!("shaders/wipe.wgsl");
+const CUT_MOTION_SHADER_ID: &str = "cut-motion";
+const CUT_MOTION_SHADER_SOURCE: &str = include_str!("shaders/cut_motion.wgsl");
 
 /// 需要第二張貼圖(group 2)的 shader
 fn requires_texture(shader: &str) -> bool {
@@ -257,6 +259,10 @@ impl EffectPipeline {
             (
                 WIPE_SHADER_ID.to_string(),
                 build_pipeline("effects-wipe", WIPE_SHADER_SOURCE),
+            ),
+            (
+                CUT_MOTION_SHADER_ID.to_string(),
+                build_pipeline("effects-cut-motion", CUT_MOTION_SHADER_SOURCE),
             ),
             (
                 LUT_SHADER_ID.to_string(),
@@ -693,6 +699,33 @@ fn pack_effect_uniforms(
                 read_number_uniform(pass, "u_flip")?,
                 0.0,
                 0.0,
+            ],
+        });
+    }
+
+    if shader == CUT_MOTION_SHADER_ID {
+        reject_unknown_uniforms(
+            pass,
+            &[
+                "u_offset_x",
+                "u_offset_y",
+                "u_scale",
+                "u_rotation",
+                "u_blur",
+                "u_blur_angle",
+            ],
+        )?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [
+                read_number_uniform(pass, "u_blur")?,
+                read_number_uniform(pass, "u_blur_angle")?,
+            ],
+            scalars: [
+                read_number_uniform(pass, "u_offset_x")?,
+                read_number_uniform(pass, "u_offset_y")?,
+                read_number_uniform(pass, "u_scale")?,
+                read_number_uniform(pass, "u_rotation")?,
             ],
         });
     }

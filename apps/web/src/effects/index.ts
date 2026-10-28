@@ -22,6 +22,9 @@ export function resolveEffectPasses({
 	/** 從片段開頭算起的秒數 */
 	time?: number;
 }): EffectPass[] {
+	if (definition.renderer.skipWhen?.({ effectParams })) {
+		return [];
+	}
 	if (definition.renderer.buildPasses) {
 		return definition.renderer.buildPasses({ effectParams, width, height, time });
 	}

@@ -13,3 +13,4 @@ export * from "./effects";
 export * from "./masks";
 export { AutoCutCommand } from "./auto-cut";
 export { KaraokeCommand } from "./karaoke";
+export { CutTransitionCommand } from "./cut-transition";

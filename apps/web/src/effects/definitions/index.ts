@@ -3,6 +3,7 @@ import { blurEffectDefinition } from "./blur";
 import { chromaKeyEffectDefinition } from "./chroma-key";
 import { lutEffectDefinition } from "./lut";
 import { wipeEffectDefinition } from "./wipe";
+import { cutMotionEffectDefinition } from "./cut-motion";
 import {
 	cameraShakeEffectDefinition,
 	glitchEffectDefinition,
@@ -57,6 +58,7 @@ const defaultEffects = [
 	glitchEffectDefinition,
 	mirrorEffectDefinition,
 	wipeEffectDefinition,
+	cutMotionEffectDefinition,
 ];
 
 export function registerDefaultEffects(): void {

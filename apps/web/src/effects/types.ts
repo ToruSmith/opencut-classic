@@ -38,6 +38,12 @@ export interface EffectRendererConfig {
 		height: number;
 		time?: number;
 	}) => EffectPass[];
+	/**
+	 * 參數為中性值(畫面不會變)時回傳 true,這一格就不送 pass。
+	 * 切點轉場把特效留在片段上、只在切點附近把強度拉高,其餘時間靠這個不多跑全畫面 pass。
+	 * 只在 shader 對這組參數確實是「原圖照抄」時才寫。
+	 */
+	skipWhen?: (params: { effectParams: ParamValues }) => boolean;
 }
 
 export interface EffectDefinition {

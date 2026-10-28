@@ -44,6 +44,7 @@
 | 進度式擦除轉場(線性 / 光圈 / 時鐘 / 百葉窗 / 棋盤 / 菱形 / 噪點溶解 / 方塊崩落 / 對開) | `wipe.wgsl`、`effects/definitions/wipe.ts`、`transitions/wipe-transition.ts`、`ApplyWipeCommand` | 轉場面板「兩段之間的擦除」、特效「擦除」 | 3.18 |
 | 節拍標記、依節拍分割、重排、一鍵快剪 | `media/beat-detect.ts`、`timeline/{reorder,bookmarks/beat-markers}.ts`、`QuickCutCommand` | 時間軸工具列音符按鈕 | 3.15 |
 | 自動排片(依節拍從素材庫抽片段排滿整首歌) | `timeline/auto-cut.ts`、`AutoCutCommand` | 節拍面板「自動排片」 | 3.19 |
+| 切點轉場(閃白 / 縮放衝入 / 甩鏡 / 旋轉甩入 / 故障切 / 震動切 / 隨機,不需重疊) | `transitions/cut-transition.ts`、`CutTransitionCommand`、`cut_motion.wgsl`、特效的 `skipWhen` | 轉場面板最上方「切點轉場」 | 3.22 |
 | 範圍匯出(只輸出時間軸上的一段) | `export/range.ts`、`createTimelineAudioStream({ startTime })`、`SceneExporter` 的 `range` | 匯出視窗「範圍」 | 3.20 |
 | 卡拉 OK 填色(選取字幕,高亮色由左向右蓋過底色) | `subtitles/karaoke.ts`、`KaraokeCommand`、`wipe.wgsl` 線性範圍 | 字幕面板「卡拉 OK 填色」 | 3.21 |
 | 音訊淡入淡出、版本紀錄、代理檔、備份 / 重新連結 | 見各章節 | 屬性面板 / 素材庫 / 專案選單 | 3.6 ~ 3.8、3.12 |
@@ -138,7 +139,8 @@
   direction 依模式有三種用途:線性 = 掃過範圍、光圈 / 時鐘 / 菱形 = 中心、百葉窗 / 棋盤 / 溶解 / 方塊 = (數量, 種子)。
   每個模式只是「這個像素在進度多少時被擦掉」的不同算法(`sweep_position`),一個 pass、沒有額外貼圖;噪點溶解是兩層 value noise,種子先 `fract` 成小偏移(直接乘大數會讓雜湊失去精度)。
   進度 0 = 沒擦、1 = 全透明(邊緣位置 `progress * (1 + softness)`,兩端剛好完全沒擦 / 擦完)。`definitions/wipe.ts` 的 `buildPasses` 在**進度為 0 時回傳空陣列**,
-  所以特效留在片段上、轉場以外的時間不會多跑一個全畫面 pass(但這個片段仍帶著一組空的 effectPassGroups,是否有額外圖層開銷未實測)。
+  所以特效留在片段上、轉場以外的時間不會多跑一個全畫面 pass。空的 effectPassGroups 在合成器裡直接略過(`apply_effect_groups` 的 `group.is_empty()`),
+  每個圖層本來就會先畫進一張畫面大小的貼圖,所以沒有額外的圖層開銷(2026-10-28 讀程式確認,不是實測)。
   套用(`wipe-transition.ts` 純函式 + `ApplyWipeCommand`):只對重疊時**在上層**的那一段加特效並對 `effects.<id>.params.progress` 做關鍵影格
   (上層是前一段:0 → 100;是後一段:100 → 0 且反向旗標取反,讓前進方向一致)。特效 id 要執行後才知道,所以 `ApplyWipeCommand` 像 `QuickCutCommand` 直接呼叫子指令的 `execute()`、undo 反向還原,一個復原步驟。
   再按一次會再疊一個擦除特效(可在特效屬性刪掉舊的)。
@@ -156,6 +158,15 @@
   `measureTextElement` 量出的 `visualRect` 是相對文字原點,實際位置 = 畫布中心 + `position` + `scale * rect`(`computeTextSpanFraction`),轉成 0..1 的左右邊界。
   擦除線性模式的 `rangeStart` / `rangeEnd`(%)重新映射掃過位置,**借用 direction 的兩個槽位**(`u_center_x/y`),Rust 端沒改;光圈 / 時鐘仍用 `centerX/Y`。舊專案沒有這兩個參數時預設 0 / 100。
   限制:均勻速度、多行整塊由左向右、旋轉文字退回整個畫面寬度。像 `AutoCutCommand` 一樣只更新一次時間軸狀態,一個復原步驟。
+- **切點轉場**(`transitions/cut-transition.ts`,純函式,有測試;`CutTransitionCommand`):剪映「熱門轉場」那一類,**不需要重疊軌道**。
+  對同一條軌道首尾相接的片段(`findCutPoints`,誤差 1/60 秒),前一段最後 h 秒把效果拉到峰值、後一段前 h 秒從峰值降回(緩入 / 緩出用 4 個關鍵影格近似,不靠 bezier)。
+  全部是「片段上的特效 + 特效參數關鍵影格」:閃白 = 色彩調整的亮度;縮放 / 旋轉 / 甩鏡 = 新特效「轉場運動」`cut-motion`(平移、縮放、旋轉、方向模糊,畫面外鏡像延伸不露黑邊)
+  加放射模糊;故障切 = 故障 + 色差;震動切 = 畫面震動 + 輕推。**不動片段自己的位置 / 縮放關鍵影格**,所以能乾淨地取代:
+  特效 id 以 `cut-out-` / `cut-in-` 開頭,再套一次時 `stripCutEffects` 先拿掉同一端的舊特效與它們的關鍵影格(一個片段開頭和結尾可以各有一組)。
+  全部算完才更新一次時間軸狀態(像 `KaraokeCommand`),單一復原步驟;「每個切點隨機」用 `pickCutKinds`(同種子可重現、相鄰不重複)。
+  **效能**:特效留在片段上整段都在,轉場以外的時間參數是中性值 → `EffectRendererConfig.skipWhen` / `buildPasses` 回傳空,不跑 pass。
+  `skipWhen` 加在放射模糊(強度 0)、故障(強度 0)、色差(位移 0)、震動(幅度與旋轉都 0)、所有色彩類(換算後等於中性值)。**只在 shader 對那組參數確實是原圖照抄時才加 `skipWhen`。**
+  轉場中最貴的是放射模糊(32 點)和方向模糊(依長度,上限 32 點),只在切點前後 0.2~0.7 秒。
 - **隨機轉場**(`transitions/presets.ts` 的 `pickRandomMotions`,純函式,有測試):對選取的多個片段(依開始時間排序)各抽一種進場 / 出場動畫
   (滑入 ×4、縮放、旋轉、彈出;**不含單純淡化**,否則切點處會一格一格閃黑),相鄰不重複、同種子可重現。
   不需要重疊軌道,直接用單一片段的進出場關鍵影格,所以可以套在快剪切出來的小段上;長度仍受「不超過片段一半」限制。

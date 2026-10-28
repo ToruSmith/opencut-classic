@@ -45,6 +45,7 @@ import {
 	QuickCutCommand,
 	AutoCutCommand,
 	KaraokeCommand,
+	CutTransitionCommand,
 	TracksSnapshotCommand,
 	UpsertKeyframeCommand,
 	RemoveKeyframeCommand,
@@ -283,6 +284,13 @@ export class TimelineManager {
 		const command = new KaraokeCommand(params);
 		this.editor.command.execute({ command });
 		return command.getCount();
+	}
+
+	/** 切點轉場;回傳實際套用的切點數 */
+	applyCutTransitions(params: ConstructorParameters<typeof CutTransitionCommand>[0]): number {
+		const command = new CutTransitionCommand(params);
+		this.editor.command.execute({ command });
+		return command.getAppliedCount();
 	}
 
 	getTotalDuration(): MediaTime {

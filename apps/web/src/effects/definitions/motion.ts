@@ -59,6 +59,13 @@ export const cameraShakeEffectDefinition: EffectDefinition = {
 		{ key: "seed", label: "換一種晃法", type: "number", default: 1, min: 0, max: 999, step: 1 },
 	],
 	renderer: {
+		// 幅度與旋轉都是 0 時 shader 是原圖照抄(放大填滿的倍率也是 1)
+		skipWhen: ({ effectParams }) => {
+			const p = effectParams as Record<string, unknown>;
+			const amount = Number(p.amount ?? 20);
+			const rotation = Number(p.rotation ?? 1);
+			return Number.isFinite(amount) && Number.isFinite(rotation) && amount <= 0 && rotation <= 0;
+		},
 		passes: [
 			{
 				shader: CAMERA_SHAKE_SHADER,
@@ -91,6 +98,10 @@ export const zoomBlurEffectDefinition: EffectDefinition = {
 		{ key: "centerY", label: "中心 Y", type: "number", default: 50, min: 0, max: 100, step: 1 },
 	],
 	renderer: {
+		skipWhen: ({ effectParams }) => {
+			const value = Number((effectParams as Record<string, unknown>).strength ?? 30);
+			return Number.isFinite(value) && value <= 0;
+		},
 		passes: [
 			{
 				shader: ZOOM_BLUR_SHADER,
@@ -122,6 +133,10 @@ export const glitchEffectDefinition: EffectDefinition = {
 		{ key: "seed", label: "換一種花樣", type: "number", default: 1, min: 0, max: 999, step: 1 },
 	],
 	renderer: {
+		skipWhen: ({ effectParams }) => {
+			const value = Number((effectParams as Record<string, unknown>).intensity ?? 50);
+			return Number.isFinite(value) && value <= 0;
+		},
 		passes: [
 			{
 				shader: GLITCH_SHADER,
