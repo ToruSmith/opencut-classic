@@ -47,6 +47,8 @@ import {
 	KaraokeCommand,
 	CutTransitionCommand,
 	SpeedRampCommand,
+	BeatPulseCommand,
+	FreezeFrameCommand,
 	TracksSnapshotCommand,
 	UpsertKeyframeCommand,
 	RemoveKeyframeCommand,
@@ -302,6 +304,31 @@ export class TimelineManager {
 		const command = new SpeedRampCommand(params);
 		this.editor.command.execute({ command });
 		return { pieces: command.getPieceCount(), error: command.getError() };
+	}
+
+	/** 節拍脈衝(踩點縮放);回傳套用的片段數與脈衝數(applied 為 0 時原因在 error) */
+	applyBeatPulse(params: ConstructorParameters<typeof BeatPulseCommand>[0]): {
+		applied: number;
+		pulses: number;
+		error: string | null;
+	} {
+		const command = new BeatPulseCommand(params);
+		this.editor.command.execute({ command });
+		return {
+			applied: command.getAppliedCount(),
+			pulses: command.getPulseCount(),
+			error: command.getError(),
+		};
+	}
+
+	/** 凍結影格;成功時 done 為 true,失敗時原因在 error */
+	freezeFrame(params: ConstructorParameters<typeof FreezeFrameCommand>[0]): {
+		done: boolean;
+		error: string | null;
+	} {
+		const command = new FreezeFrameCommand(params);
+		this.editor.command.execute({ command });
+		return { done: command.isDone(), error: command.getError() };
 	}
 
 	getTotalDuration(): MediaTime {

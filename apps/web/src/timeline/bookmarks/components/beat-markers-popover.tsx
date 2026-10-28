@@ -36,6 +36,8 @@ export function BeatMarkersPopover({
 	const [minPieceSeconds, setMinPieceSeconds] = useState(0);
 	const [minGapSeconds, setMinGapSeconds] = useState(0.15);
 	const [quickShuffle, setQuickShuffle] = useState(true);
+	const [pulseEvery, setPulseEvery] = useState(1);
+	const [pulseStrength, setPulseStrength] = useState(0.08);
 	const [autoEvery, setAutoEvery] = useState(4);
 	const [autoMinSeconds, setAutoMinSeconds] = useState(1);
 	const [excludedAssetIds, setExcludedAssetIds] = useState<Set<string>>(new Set());
@@ -142,6 +144,34 @@ export function BeatMarkersPopover({
 			splitTimes: [...splitTimes] as MediaTime[],
 		});
 		toast.success(`已在 ${splitTimes.size} 個節拍處分割(${affected} 個片段)`);
+	};
+
+	const handlePulse = () => {
+		const selected = editor.selection.getSelectedElements();
+		if (selected.length === 0) {
+			toast.error("請先在時間軸選取要踩點縮放的片段");
+			return;
+		}
+		const beats = editor.scenes
+			.getActiveScene()
+			.bookmarks.filter((bookmark) => isBeatBookmark({ bookmark }))
+			.map((bookmark) => (bookmark.time as number) / TICKS_PER_SECOND);
+		if (beats.length === 0) {
+			toast.error("還沒有節拍標記,請先分析");
+			return;
+		}
+		const result = editor.timeline.applyBeatPulse({
+			elements: selected,
+			beats,
+			every: pulseEvery,
+			strength: pulseStrength,
+			decaySeconds: 0.25,
+		});
+		if (result.error) {
+			toast.error(result.error);
+			return;
+		}
+		toast.success(`已對 ${result.applied} 個片段加上 ${result.pulses} 次節拍脈衝(取代原有縮放關鍵影格;一次復原)`);
 	};
 
 	const handleQuickCut = () => {
@@ -399,6 +429,43 @@ export function BeatMarkersPopover({
 							反轉順序
 						</Button>
 					</div>
+				</div>
+				<div className="border-t pt-3 flex flex-col gap-2">
+					<span className="text-sm font-medium">節拍脈衝(踩點縮放)</span>
+					<span className="text-muted-foreground text-xs leading-relaxed">
+						選取片段,每個節拍瞬間放大一點再收回。會取代片段原有的縮放關鍵影格。
+					</span>
+					<div className="flex flex-wrap items-center gap-1">
+						<span className="text-muted-foreground text-xs">每</span>
+						{[1, 2, 4].map((value) => (
+							<Button
+								key={value}
+								size="sm"
+								variant={pulseEvery === value ? "default" : "outline"}
+								onClick={() => setPulseEvery(value)}
+							>
+								{value} 拍
+							</Button>
+						))}
+						<span className="text-muted-foreground ml-2 text-xs">幅度</span>
+						{[
+							{ value: 0.04, label: "輕" },
+							{ value: 0.08, label: "中" },
+							{ value: 0.15, label: "強" },
+						].map((option) => (
+							<Button
+								key={option.value}
+								size="sm"
+								variant={pulseStrength === option.value ? "default" : "outline"}
+								onClick={() => setPulseStrength(option.value)}
+							>
+								{option.label}
+							</Button>
+						))}
+					</div>
+					<Button size="sm" disabled={busy || beatCount === 0} onClick={handlePulse}>
+						套用節拍脈衝
+					</Button>
 				</div>
 				<div className="border-t pt-3 flex flex-col gap-2">
 					<span className="text-sm font-medium">自動排片(剪 AMV)</span>

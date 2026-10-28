@@ -15,3 +15,5 @@ export { AutoCutCommand } from "./auto-cut";
 export { KaraokeCommand } from "./karaoke";
 export { CutTransitionCommand } from "./cut-transition";
 export { SpeedRampCommand } from "./speed-ramp";
+export { BeatPulseCommand } from "./beat-pulse";
+export { FreezeFrameCommand } from "./freeze-frame";
