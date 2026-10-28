@@ -45,6 +45,7 @@
 | 節拍標記、依節拍分割、重排、一鍵快剪 | `media/beat-detect.ts`、`timeline/{reorder,bookmarks/beat-markers}.ts`、`QuickCutCommand` | 時間軸工具列音符按鈕 | 3.15 |
 | 自動排片(依節拍從素材庫抽片段排滿整首歌) | `timeline/auto-cut.ts`、`AutoCutCommand` | 節拍面板「自動排片」 | 3.19 |
 | PV 畫面效果:網點 / 雙色調 / VHS / 集中線 / 波浪扭曲 / 漏光 / 魚眼 | `effects/definitions/pv.ts`、`halftone` `duotone` `vhs` `speed_lines` `wave` `light_leak` `fisheye` `.wgsl` | 特效面板 | 3.23 |
+| 變速曲線(階梯式:漸快 / 漸慢 / 子彈時間 / 中間衝刺) | `retime/speed-ramp.ts`、`SpeedRampCommand` | 屬性面板「速度」分頁 | 3.24 |
 | 切點轉場(閃白 / 縮放衝入 / 甩鏡 / 旋轉甩入 / 故障切 / 震動切 / 隨機,不需重疊) | `transitions/cut-transition.ts`、`CutTransitionCommand`、`cut_motion.wgsl`、特效的 `skipWhen` | 轉場面板最上方「切點轉場」 | 3.22 |
 | 範圍匯出(只輸出時間軸上的一段) | `export/range.ts`、`createTimelineAudioStream({ startTime })`、`SceneExporter` 的 `range` | 匯出視窗「範圍」 | 3.20 |
 | 卡拉 OK 填色(選取字幕,高亮色由左向右蓋過底色) | `subtitles/karaoke.ts`、`KaraokeCommand`、`wipe.wgsl` 線性範圍 | 字幕面板「卡拉 OK 填色」 | 3.21 |
@@ -245,6 +246,11 @@
   - 效果面板會依參數的 `dependencies` 隱藏用不到的欄位。
   - 特效片段的名稱:新建時用定義的中文名稱;時間軸顯示用 `effects/display-name.ts`,
     舊版自動產生的英文名稱(`Film-grain`)會改顯示中文,使用者改過的名稱不變。
+- **變速曲線(階梯式近似)**(`retime/speed-ramp.ts` 純函式,有測試;`SpeedRampCommand`):把一個影片片段切成 N 段(素材長度相同),各段套不同的固定 `retime.rate`,總長度不變
+  (各段倍率同乘 k = mean(1/m));曲線 = 漸快 / 漸慢 / 子彈時間(中間慢)/ 中間衝刺,強度 1 = 最慢最快相差 4 倍。倍率超過 0.01~5、或單段短於 0.1 秒時 `planSpeedRamp` 回 `ok: false`,介面停用按鈕並顯示原因。
+  **為什麼不做連續曲線**:retime 格式只有單一倍率,連續曲線要動專案格式(要寫遷移),縮放 / 分割 / 裁切 / 音訊 / 代理檔都得改,而且沒有影格混合,慢速時本來就會一格一格,維護成本高、收益有限。
+  指令做法同 `QuickCutCommand`:直接呼叫 `SplitElementsCommand.execute()` 由後往前等分(左半保留原 id),之後只更新一次時間軸狀態(各段 retime / startTime / duration,最後一段吃掉進位誤差),`isSourceAudioEnabled: false`;一個復原步驟。
+  限制:只支援影片、聲音靜音、不做關鍵影格的時間重映射(片段上原有的動畫被切到對應段)、段數太多預覽會吃力(先建立代理檔)。
 - **PV 畫面效果**(`definitions/pv.ts`,2026-10-28):網點、雙色調、VHS 錄影帶、集中線、波浪扭曲、漏光、魚眼,每個一支 shader、單一 pass、只看當下這格的這個圖層(沒有歷史影格、沒有額外貼圖)。
   uniform 只有 6 個可用浮點數(8 個扣掉 `resolution`),所以雙色調用「色相 + 共同飽和度」而不是兩個 RGB 色;集中線的中心固定在畫面中心。
   強度為 0 時 `skipWhen` 成立不送 pass;會動的(VHS、集中線、波浪、漏光)用 `time` 驅動,集中線每秒換 12 組、VHS 每秒 24 次換雜訊,預覽與匯出相同。

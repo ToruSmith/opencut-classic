@@ -13,6 +13,7 @@ import {
 	canMaintainPitch,
 } from "@/retime/rate";
 import type { AudioElement, VideoElement } from "@/timeline";
+import { SpeedRampSection } from "./speed-ramp-section";
 import {
 	Section,
 	SectionContent,
@@ -150,6 +151,11 @@ export function SpeedTab({
 						/>
 					</div>
 				</SectionFields>
+				{element.type === "video" && (
+					<div className="mt-3">
+						<SpeedRampSection element={element} trackId={trackId} />
+					</div>
+				)}
 			</SectionContent>
 		</Section>
 	);

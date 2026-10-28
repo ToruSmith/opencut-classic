@@ -46,6 +46,7 @@ import {
 	AutoCutCommand,
 	KaraokeCommand,
 	CutTransitionCommand,
+	SpeedRampCommand,
 	TracksSnapshotCommand,
 	UpsertKeyframeCommand,
 	RemoveKeyframeCommand,
@@ -291,6 +292,16 @@ export class TimelineManager {
 		const command = new CutTransitionCommand(params);
 		this.editor.command.execute({ command });
 		return command.getAppliedCount();
+	}
+
+	/** 變速曲線(階梯式);回傳切出的段數(0 = 沒套用,原因在 error) */
+	applySpeedRamp(params: ConstructorParameters<typeof SpeedRampCommand>[0]): {
+		pieces: number;
+		error: string | null;
+	} {
+		const command = new SpeedRampCommand(params);
+		this.editor.command.execute({ command });
+		return { pieces: command.getPieceCount(), error: command.getError() };
 	}
 
 	getTotalDuration(): MediaTime {
