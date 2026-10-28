@@ -1,7 +1,7 @@
 import type { EffectDefinition, EffectPass } from "@/effects/types";
 
 /**
- * 擦除(線性 / 圓形光圈 / 時鐘)。把片段的圖層擦成透明、露出下面的畫面,
+ * 擦除(線性 / 光圈 / 時鐘 / 百葉窗 / 棋盤 / 菱形 / 噪點溶解 / 方塊崩落 / 對開)。把片段的圖層擦成透明、露出下面的畫面,
  * 「進度」參數可以做關鍵影格,所以不用動專案格式就能做出真正的擦除轉場。
  * 著色器在 rust/crates/effects/src/shaders/wipe.wgsl;uniform 名稱要和 pipeline.rs 完全一致。
  *
@@ -11,8 +11,27 @@ import type { EffectDefinition, EffectPass } from "@/effects/types";
 
 export const WIPE_SHADER = "wipe";
 
-export const WIPE_KINDS = ["linear", "iris", "clock"] as const;
+/** 順序 = shader 的模式編號,只能往後加 */
+export const WIPE_KINDS = [
+	"linear",
+	"iris",
+	"clock",
+	"blinds",
+	"checker",
+	"diamond",
+	"dissolve",
+	"blocks",
+	"split",
+] as const;
 export type WipeKind = (typeof WIPE_KINDS)[number];
+
+/** 反向旗標:shader 的模式編號 + 16 */
+export const WIPE_REVERSE_FLAG = 16;
+
+/** 用「數量 / 種子」而不是中心點的模式 */
+const PATTERN_KINDS: ReadonlySet<WipeKind> = new Set(["blinds", "checker", "dissolve", "blocks"]);
+/** 用中心點的模式 */
+const CENTERED_KINDS: ReadonlySet<WipeKind> = new Set(["iris", "clock", "diamond"]);
 
 function num({
 	params,
@@ -40,13 +59,20 @@ export function buildWipeUniforms({
 }): Record<string, number> {
 	const index = WIPE_KINDS.indexOf(String(effectParams.mode) as WipeKind);
 	const kindIndex = index >= 0 ? index : 0;
+	const kind = WIPE_KINDS[kindIndex]!;
 	return {
-		u_mode: kindIndex + (effectParams.reverse === true ? 3 : 0),
+		u_mode: kindIndex + (effectParams.reverse === true ? WIPE_REVERSE_FLAG : 0),
 		u_progress: clamp({ value: num({ params: effectParams, key: "progress", fallback: 0 }), min: 0, max: 100 }) / 100,
 		u_softness: clamp({ value: num({ params: effectParams, key: "softness", fallback: 20 }), min: 0, max: 100 }) / 100,
 		u_angle: clamp({ value: num({ params: effectParams, key: "angle", fallback: 0 }), min: 0, max: 360 }),
-		// 同一組 uniform 兩種用途:線性 = 掃過範圍的起點 / 終點,光圈與時鐘 = 中心 X / Y
-		...(kindIndex === 0
+		// 同一組 uniform 三種用途:線性 = 掃過範圍的起點 / 終點,光圈 / 時鐘 / 菱形 = 中心 X / Y,
+		// 百葉窗 / 棋盤 / 溶解 / 方塊 = 數量 / 種子(對開不用)
+		...(PATTERN_KINDS.has(kind)
+			? {
+					u_center_x: Math.round(clamp({ value: num({ params: effectParams, key: "count", fallback: 8 }), min: 2, max: 40 })),
+					u_center_y: clamp({ value: num({ params: effectParams, key: "seed", fallback: 0 }), min: 0, max: 999 }),
+				}
+			: !CENTERED_KINDS.has(kind)
 			? {
 					u_center_x: clamp({ value: num({ params: effectParams, key: "rangeStart", fallback: 0 }), min: 0, max: 100 }) / 100,
 					u_center_y: clamp({ value: num({ params: effectParams, key: "rangeEnd", fallback: 100 }), min: 0, max: 100 }) / 100,
@@ -61,7 +87,7 @@ export function buildWipeUniforms({
 export const wipeEffectDefinition: EffectDefinition = {
 	type: "wipe",
 	name: "擦除",
-	keywords: ["wipe", "iris", "clock", "reveal", "transition", "擦除", "光圈", "時鐘", "轉場", "揭開"],
+	keywords: ["wipe", "iris", "clock", "blinds", "checker", "dissolve", "百葉窗", "棋盤", "溶解", "reveal", "transition", "擦除", "光圈", "時鐘", "轉場", "揭開"],
 	params: [
 		{
 			key: "mode",
@@ -73,6 +99,12 @@ export const wipeEffectDefinition: EffectDefinition = {
 				{ value: "linear", label: "線性擦除" },
 				{ value: "iris", label: "圓形光圈" },
 				{ value: "clock", label: "時鐘掃過" },
+				{ value: "blinds", label: "百葉窗" },
+				{ value: "checker", label: "棋盤" },
+				{ value: "diamond", label: "菱形" },
+				{ value: "dissolve", label: "噪點溶解" },
+				{ value: "blocks", label: "方塊崩落" },
+				{ value: "split", label: "對開" },
 			],
 		},
 		{ key: "progress", label: "進度(%)", type: "number", default: 0, min: 0, max: 100, step: 1 },
@@ -90,6 +122,8 @@ export const wipeEffectDefinition: EffectDefinition = {
 		{ key: "reverse", label: "反向", type: "boolean", default: false, keyframable: false },
 		{ key: "centerX", label: "中心 X(光圈 / 時鐘)", type: "number", default: 50, min: 0, max: 100, step: 1, keyframable: false },
 		{ key: "centerY", label: "中心 Y(光圈 / 時鐘)", type: "number", default: 50, min: 0, max: 100, step: 1, keyframable: false },
+		{ key: "count", label: "數量(百葉窗 / 棋盤 / 溶解 / 方塊)", type: "number", default: 8, min: 2, max: 40, step: 1, keyframable: false },
+		{ key: "seed", label: "種子(溶解 / 方塊)", type: "number", default: 0, min: 0, max: 999, step: 1, keyframable: false },
 		{ key: "rangeStart", label: "線性掃過起點(%)", type: "number", default: 0, min: 0, max: 100, step: 1, keyframable: false },
 		{ key: "rangeEnd", label: "線性掃過終點(%)", type: "number", default: 100, min: 0, max: 100, step: 1, keyframable: false },
 	],

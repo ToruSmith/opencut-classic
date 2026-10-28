@@ -63,6 +63,8 @@ export function planWipeForItem({
 			reverse: isIn ? !reverse : reverse,
 			centerX: 50,
 			centerY: 50,
+			count: 8,
+			seed: 0,
 		},
 		keyframes: [
 			{ seconds: start, value: isIn ? 100 : 0 },

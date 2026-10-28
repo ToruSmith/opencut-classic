@@ -41,7 +41,7 @@
 | 效果組合(衝擊、復古膠卷…) | `effects/presets.ts`、`timeline.insertElements` | 特效面板上方 | 3.13 |
 | 進出場動畫、隨機轉場 | `transitions/presets.ts` | 轉場面板 | 3.16 |
 | 交叉溶解、推移 / 滑動擦除 / 縮放 | `transitions/{cross-dissolve,pair-transition}.ts` | 轉場面板「兩段之間」 | 3.14 |
-| 進度式擦除轉場(線性 / 圓形光圈 / 時鐘) | `wipe.wgsl`、`effects/definitions/wipe.ts`、`transitions/wipe-transition.ts`、`ApplyWipeCommand` | 轉場面板「兩段之間的擦除」、特效「擦除」 | 3.18 |
+| 進度式擦除轉場(線性 / 光圈 / 時鐘 / 百葉窗 / 棋盤 / 菱形 / 噪點溶解 / 方塊崩落 / 對開) | `wipe.wgsl`、`effects/definitions/wipe.ts`、`transitions/wipe-transition.ts`、`ApplyWipeCommand` | 轉場面板「兩段之間的擦除」、特效「擦除」 | 3.18 |
 | 節拍標記、依節拍分割、重排、一鍵快剪 | `media/beat-detect.ts`、`timeline/{reorder,bookmarks/beat-markers}.ts`、`QuickCutCommand` | 時間軸工具列音符按鈕 | 3.15 |
 | 自動排片(依節拍從素材庫抽片段排滿整首歌) | `timeline/auto-cut.ts`、`AutoCutCommand` | 節拍面板「自動排片」 | 3.19 |
 | 範圍匯出(只輸出時間軸上的一段) | `export/range.ts`、`createTimelineAudioStream({ startTime })`、`SceneExporter` 的 `range` | 匯出視窗「範圍」 | 3.20 |
@@ -133,8 +133,10 @@
   配對邏輯在 `cross-dissolve.ts` 的 `findTransitionPair`。全用關鍵影格(位置 / 縮放 / 不透明度)+ 音訊淡化,以 `applyElementEdits` 合成一個復原步驟。
   **遮罩參數不能做關鍵影格**(`animation/` 只認片段屬性、特效參數、圖形參數),所以沒有「遮罩掃過」式的擦除;
   「滑動擦除」是上層片段滑進來蓋住(覆蓋)或滑出去露出下面(揭開)。真正的擦除見下一條「進度式擦除」。
-- **進度式擦除**(線性 / 圓形光圈 / 時鐘):走「帶進度參數的 shader 特效」那條路,不動專案格式。
-  `wipe.wgsl` 把圖層 alpha 乘上遮罩(premultiplied,整個 rgba 相乘):scalars = (模式, 進度, 柔邊, 角度),direction = 中心;模式加 3 = 反向。
+- **進度式擦除**(線性 / 圓形光圈 / 時鐘 / 百葉窗 / 棋盤 / 菱形 / 噪點溶解 / 方塊崩落 / 對開):走「帶進度參數的 shader 特效」那條路,不動專案格式。
+  `wipe.wgsl` 把圖層 alpha 乘上遮罩(premultiplied,整個 rgba 相乘):scalars = (模式, 進度, 柔邊, 角度);**模式編號 = `WIPE_KINDS` 的順序(只能往後加),加 16 = 反向**(以前是加 3,專案存的是模式名稱,所以不影響舊專案)。
+  direction 依模式有三種用途:線性 = 掃過範圍、光圈 / 時鐘 / 菱形 = 中心、百葉窗 / 棋盤 / 溶解 / 方塊 = (數量, 種子)。
+  每個模式只是「這個像素在進度多少時被擦掉」的不同算法(`sweep_position`),一個 pass、沒有額外貼圖;噪點溶解是兩層 value noise,種子先 `fract` 成小偏移(直接乘大數會讓雜湊失去精度)。
   進度 0 = 沒擦、1 = 全透明(邊緣位置 `progress * (1 + softness)`,兩端剛好完全沒擦 / 擦完)。`definitions/wipe.ts` 的 `buildPasses` 在**進度為 0 時回傳空陣列**,
   所以特效留在片段上、轉場以外的時間不會多跑一個全畫面 pass(但這個片段仍帶著一組空的 effectPassGroups,是否有額外圖層開銷未實測)。
   套用(`wipe-transition.ts` 純函式 + `ApplyWipeCommand`):只對重疊時**在上層**的那一段加特效並對 `effects.<id>.params.progress` 做關鍵影格

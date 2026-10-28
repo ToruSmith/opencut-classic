@@ -115,6 +115,36 @@ const WIPE_KINDS_UI: Array<{ kind: WipeKind; label: string; hint: string }> = [
 		label: "時鐘掃過",
 		hint: "像時鐘指針從 12 點鐘順時針掃一圈",
 	},
+	{
+		kind: "blinds",
+		label: "百葉窗",
+		hint: "整個畫面切成 8 條,每條同時沿方向擦開",
+	},
+	{
+		kind: "checker",
+		label: "棋盤",
+		hint: "格子交錯擦開,一半先、一半後",
+	},
+	{
+		kind: "diamond",
+		label: "菱形",
+		hint: "從中心打開一個菱形",
+	},
+	{
+		kind: "dissolve",
+		label: "噪點溶解",
+		hint: "像墨水暈開或燒穿,不規則地溶掉",
+	},
+	{
+		kind: "blocks",
+		label: "方塊崩落",
+		hint: "畫面切成方塊,隨機一塊一塊消失(硬邊最明顯)",
+	},
+	{
+		kind: "split",
+		label: "對開",
+		hint: "從中線往兩側打開(像拉開門);方向決定是左右開還是上下開",
+	},
 ];
 
 const WIPE_SOFTNESS = [
@@ -483,19 +513,22 @@ export function TransitionsView() {
 							反向
 						</Button>
 					</div>
-					{WIPE_KINDS_UI.map((k) => (
-						<Button
-							key={k.kind}
-							variant="outline"
-							className="h-auto flex-col items-start gap-0.5 py-2"
-							onClick={() => applyWipe(k.kind)}
-						>
-							<span>{k.label}</span>
-							<span className="text-muted-foreground text-left text-xs font-normal whitespace-normal">
-								{k.hint}
-							</span>
-						</Button>
-					))}
+					<div className="grid grid-cols-2 gap-1">
+						{WIPE_KINDS_UI.map((k) => (
+							<Button
+								key={k.kind}
+								variant="outline"
+								className="h-auto flex-col items-start gap-0.5 py-2"
+								title={k.hint}
+								onClick={() => applyWipe(k.kind)}
+							>
+								<span>{k.label}</span>
+								<span className="text-muted-foreground text-left text-xs font-normal whitespace-normal">
+									{k.hint}
+								</span>
+							</Button>
+						))}
+					</div>
 					<span className="text-muted-foreground text-xs">
 						在上層那一段加「擦除」特效並對進度做關鍵影格,之後可在特效屬性裡調整;轉場以外的時間特效不會多跑一個 pass。
 					</span>
