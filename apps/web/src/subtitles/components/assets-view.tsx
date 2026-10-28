@@ -27,6 +27,7 @@ import { buildCaptionChunks } from "@/transcription/caption";
 import { insertCaptionChunksAsTextTrack } from "@/subtitles/insert";
 import { parseSubtitleFile } from "@/subtitles/parse";
 import { KaraokeSection } from "@/subtitles/components/karaoke-section";
+import { SubtitleExportSection } from "@/subtitles/components/subtitle-export-section";
 import { LyricsTap } from "@/subtitles/components/lyrics-tap";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -341,6 +342,8 @@ export function Captions() {
 					<LyricsTap />
 
 					<KaraokeSection />
+
+					<SubtitleExportSection />
 
 					<div className="mt-auto flex w-full flex-col gap-2">
 						<Button

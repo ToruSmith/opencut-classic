@@ -48,6 +48,7 @@
 | 範圍匯出(只輸出時間軸上的一段) | `export/range.ts`、`createTimelineAudioStream({ startTime })`、`SceneExporter` 的 `range` | 匯出視窗「範圍」 | 3.20 |
 | 卡拉 OK 填色(選取字幕,高亮色由左向右蓋過底色) | `subtitles/karaoke.ts`、`KaraokeCommand`、`wipe.wgsl` 線性範圍 | 字幕面板「卡拉 OK 填色」 | 3.21 |
 | 音訊淡入淡出、版本紀錄、代理檔、備份 / 重新連結 | 見各章節 | 屬性面板 / 素材庫 / 專案選單 | 3.6 ~ 3.8、3.12 |
+| 匯出字幕 SRT / LRC(和 kinetic-lyric-console 搭配) | `subtitles/serialize.ts` | 字幕面板「匯出字幕」 | 4.2 |
 | LRC 歌詞匯入、點拍同步歌詞 | `subtitles/{lrc,timed-lines}.ts`、`subtitles/components/lyrics-tap.tsx` | 字幕面板「匯入」/「點拍同步歌詞」 | 4.1 |
 | 左側面板細捲軸 | `PanelView`(`base-panel.tsx`) | 所有左側面板 | 3.17 |
 
@@ -251,6 +252,10 @@
   點拍(`lyrics-tap.tsx`):時間取自 `editor.playback.getCurrentTime()` 再減「按鍵補償」(預設 0.1 秒),按鍵只寫進 ref,
   在 **window 捕獲階段**攔空白 / 退格(全域快捷鍵掛在 document,不攔會變成播放 / 暫停);完成時用 `insertCaptionChunksAsTextTrack` 一次寫入(單一復原步驟)。
   注意:播放頭是 `requestAnimationFrame` + `performance.now` 推算的,不是直接讀音訊時鐘,所以點拍精度受補償值影響。
+- **匯出字幕**(`subtitles/serialize.ts`,純函式,有測試):文字片段的 `params.content` + 開始 / 長度寫成 SRT 或 LRC(LRC 在下一句前有空檔時補結束標記,讀回來長度一致)。
+  有選取時只匯出選取的文字片段,否則全部。**和使用者另一個專案 kinetic-lyric-console(KLC)搭配**:KLC 是 DOM / CSS 動畫 + Playwright 離線渲染,原理不同,不移植進來;
+  流程是這裡對時間 → 匯出 SRT → KLC 上動態效果 → KLC 的綠幕輸出(`--chroma`)放回時間軸加「去背(綠幕)」。KLC 的透明輸出是 ProRes 4444 / VP9 alpha WebM,
+  瀏覽器解 ProRes 不行;VP9 alpha 經 mediabunny 解碼能不能保留 alpha **沒確認**(綠幕會丟掉 KLC 的發光 / 陰影)。
 - 字幕解析(`subtitles/`)、字幕切段(`transcription/caption.ts`)也都是純函式,有測試;中文沒有空格,按標點與字數(12 字)切。
 
 ## WASM 體積(已量測,2026-10)
