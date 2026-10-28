@@ -26,6 +26,7 @@ import {
 } from "./pair-transition";
 import { planWipeForItem } from "./wipe-transition";
 import { CutTransitionSection } from "./cut-transition-section";
+import { KenBurnsSection } from "./ken-burns-section";
 import type { WipeKind } from "@/effects/definitions/wipe";
 import {
 	buildTransitionKeyframes,
@@ -446,6 +447,7 @@ export function TransitionsView() {
 		<PanelView title="轉場">
 			<div className="flex flex-col gap-4">
 				<CutTransitionSection />
+				<KenBurnsSection />
 				<div className="flex flex-col gap-2">
 					<span className="text-muted-foreground text-xs">兩段之間</span>
 					<Button
