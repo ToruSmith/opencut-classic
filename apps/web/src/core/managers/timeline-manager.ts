@@ -48,7 +48,6 @@ import {
 	CutTransitionCommand,
 	SpeedRampCommand,
 	BeatPulseCommand,
-	FreezeFrameCommand,
 	TracksSnapshotCommand,
 	UpsertKeyframeCommand,
 	RemoveKeyframeCommand,
@@ -319,16 +318,6 @@ export class TimelineManager {
 			pulses: command.getPulseCount(),
 			error: command.getError(),
 		};
-	}
-
-	/** 凍結影格;成功時 done 為 true,失敗時原因在 error */
-	freezeFrame(params: ConstructorParameters<typeof FreezeFrameCommand>[0]): {
-		done: boolean;
-		error: string | null;
-	} {
-		const command = new FreezeFrameCommand(params);
-		this.editor.command.execute({ command });
-		return { done: command.isDone(), error: command.getError() };
 	}
 
 	getTotalDuration(): MediaTime {
