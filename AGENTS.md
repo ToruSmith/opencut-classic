@@ -47,7 +47,7 @@
 | PV 畫面效果:網點 / 雙色調 / VHS / 集中線 / 波浪扭曲 / 漏光 / 魚眼 | `effects/definitions/pv.ts`、`halftone` `duotone` `vhs` `speed_lines` `wave` `light_leak` `fisheye` `.wgsl` | 特效面板 | 3.23 |
 | 變速曲線(階梯式:漸快 / 漸慢 / 子彈時間 / 中間衝刺) | `retime/speed-ramp.ts`、`SpeedRampCommand` | 屬性面板「速度」分頁 | 3.24 |
 | 圖片緩慢推近 / 拉遠 / 平移(Ken Burns) | `transitions/ken-burns.ts`、`ken-burns-section.tsx` | 轉場面板「緩慢推近 / 平移」 | 3.25 |
-| 自動壓低背景音(ducking:人聲出現時壓低音樂) | `timeline/ducking.ts`、`DuckingCommand` | 時間軸工具列音符按鈕(節拍面板最下方) | 3.26 |
+| 自動壓低背景音(ducking:人聲出現時壓低音樂) | `timeline/ducking.ts`、`DuckingCommand` | 時間軸工具列音符按鈕(節拍面板最下方,選人聲軌 / 音樂軌) | 3.26 |
 | 切點轉場(閃白 / 縮放衝入 / 甩鏡 / 旋轉甩入 / 故障切 / 震動切 / 隨機,不需重疊) | `transitions/cut-transition.ts`、`CutTransitionCommand`、`cut_motion.wgsl`、特效的 `skipWhen` | 轉場面板最上方「切點轉場」 | 3.22 |
 | 範圍匯出(只輸出時間軸上的一段) | `export/range.ts`、`createTimelineAudioStream({ startTime })`、`SceneExporter` 的 `range` | 匯出視窗「範圍」 | 3.20 |
 | 卡拉 OK 填色(選取字幕,高亮色由左向右蓋過底色) | `subtitles/karaoke.ts`、`KaraokeCommand`、`wipe.wgsl` 線性範圍 | 字幕面板「卡拉 OK 填色」 | 3.21 |
@@ -254,7 +254,7 @@
   **為什麼不做連續曲線**:retime 格式只有單一倍率,連續曲線要動專案格式(要寫遷移),縮放 / 分割 / 裁切 / 音訊 / 代理檔都得改,而且沒有影格混合,慢速時本來就會一格一格,維護成本高、收益有限。
   指令做法同 `QuickCutCommand`:直接呼叫 `SplitElementsCommand.execute()` 由後往前等分(左半保留原 id),之後只更新一次時間軸狀態(各段 retime / startTime / duration,最後一段吃掉進位誤差),原聲預設靜音(`isSourceAudioEnabled: false`),可選保留(變調 / `maintainPitch`,各段接縫聲音會跳);一個復原步驟。
   限制:只支援影片、不做關鍵影格的時間重映射(片段上原有的動畫被切到對應段)、段數太多預覽會吃力(先建立代理檔)。
-- **自動壓低背景音**(`timeline/ducking.ts` 純函式,有測試;`DuckingCommand`):人聲片段(使用者先選取按「設為人聲」)的起迄,合併相近區間(間隔 ≤ 壓下 + 放開時間)後,在選取的音樂片段上**烘成音量(dB)關鍵影格**:人聲前 0.25 秒壓下、結束後 0.6 秒放開,壓低量 -8 / -12 / -18 dB(相對片段目前音量,下限 -60)。**不改音訊管線**:預覽、匯出、轉錄、波形本來就吃音量關鍵影格(`hasAnimatedVolume`),所以自動一致;原提議的「乘進 `resolveEffectiveAudioGain`」沒採用,因為預覽的 Web Audio 與匯出混音是兩套實作,烘成關鍵影格可以避免兩邊不一致。代價:會**取代**該音樂片段原有的全部音量關鍵影格;人聲移動 / 改長度後要重新套用;以人聲「片段」的範圍為準,不偵測片段內的靜音。一次更新時間軸狀態、單一復原步驟。
+- **自動壓低背景音**(`timeline/ducking.ts` 純函式,有測試;`DuckingCommand`):人聲軌上所有片段(介面選「人聲軌」與「音樂軌」,**不靠選取片段**:節拍面板是彈出視窗,點時間軸選片段就會關閉、元件狀態消失,第一版用「設為人聲」記住選取,使用者實測用不起來)的起迄,合併相近區間(間隔 ≤ 壓下 + 放開時間)後,在音樂軌的每個片段上**烘成音量(dB)關鍵影格**:人聲前 0.25 秒壓下、結束後 0.6 秒放開,壓低量 -8 / -12 / -18 dB(相對片段目前音量,下限 -60)。**不改音訊管線**:預覽、匯出、轉錄、波形本來就吃音量關鍵影格(`hasAnimatedVolume`),所以自動一致;原提議的「乘進 `resolveEffectiveAudioGain`」沒採用,因為預覽的 Web Audio 與匯出混音是兩套實作,烘成關鍵影格可以避免兩邊不一致。代價:會**取代**該音樂片段原有的全部音量關鍵影格;人聲移動 / 改長度後要重新套用;以人聲「片段」的範圍為準,不偵測片段內的靜音。一次更新時間軸狀態、單一復原步驟。
 - **Ken Burns**(`transitions/ken-burns.ts` 純函式,有測試):整個片段長度的縮放 / 位置關鍵影格(推近、拉遠、四向平移,幅度 8% / 15% / 30%),基準值從 `element.params` 讀,平移時全程放大 `zoom`、位移不超過多出來的邊(兩側各一半)。用 `timeline.upsertKeyframes`(不加 shader、不動專案格式);再套一次只覆蓋頭尾兩個關鍵影格,與進出場動畫的縮放 / 位置關鍵影格會混在一起(沒有自動清除)。「每個隨機」`pickKenBurnsKinds`(同種子可重現、相鄰不重複)。
 - **PV 畫面效果**(`definitions/pv.ts`,2026-10-28):網點、雙色調、VHS 錄影帶、集中線、波浪扭曲、漏光、魚眼,每個一支 shader、單一 pass、只看當下這格的這個圖層(沒有歷史影格、沒有額外貼圖)。
   uniform 只有 6 個可用浮點數(8 個扣掉 `resolution`),所以雙色調用「色相 + 共同飽和度」而不是兩個 RGB 色;集中線的中心固定在畫面中心。
