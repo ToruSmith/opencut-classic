@@ -27,6 +27,13 @@ const SHADERS: &[(&str, &str)] = &[
     ("mirror", include_str!("shaders/mirror.wgsl")),
     ("wipe", include_str!("shaders/wipe.wgsl")),
     ("cut_motion", include_str!("shaders/cut_motion.wgsl")),
+    ("halftone", include_str!("shaders/halftone.wgsl")),
+    ("duotone", include_str!("shaders/duotone.wgsl")),
+    ("vhs", include_str!("shaders/vhs.wgsl")),
+    ("speed_lines", include_str!("shaders/speed_lines.wgsl")),
+    ("wave", include_str!("shaders/wave.wgsl")),
+    ("light_leak", include_str!("shaders/light_leak.wgsl")),
+    ("fisheye", include_str!("shaders/fisheye.wgsl")),
 ];
 
 #[test]

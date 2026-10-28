@@ -44,6 +44,7 @@
 | 進度式擦除轉場(線性 / 光圈 / 時鐘 / 百葉窗 / 棋盤 / 菱形 / 噪點溶解 / 方塊崩落 / 對開) | `wipe.wgsl`、`effects/definitions/wipe.ts`、`transitions/wipe-transition.ts`、`ApplyWipeCommand` | 轉場面板「兩段之間的擦除」、特效「擦除」 | 3.18 |
 | 節拍標記、依節拍分割、重排、一鍵快剪 | `media/beat-detect.ts`、`timeline/{reorder,bookmarks/beat-markers}.ts`、`QuickCutCommand` | 時間軸工具列音符按鈕 | 3.15 |
 | 自動排片(依節拍從素材庫抽片段排滿整首歌) | `timeline/auto-cut.ts`、`AutoCutCommand` | 節拍面板「自動排片」 | 3.19 |
+| PV 畫面效果:網點 / 雙色調 / VHS / 集中線 / 波浪扭曲 / 漏光 / 魚眼 | `effects/definitions/pv.ts`、`halftone` `duotone` `vhs` `speed_lines` `wave` `light_leak` `fisheye` `.wgsl` | 特效面板 | 3.23 |
 | 切點轉場(閃白 / 縮放衝入 / 甩鏡 / 旋轉甩入 / 故障切 / 震動切 / 隨機,不需重疊) | `transitions/cut-transition.ts`、`CutTransitionCommand`、`cut_motion.wgsl`、特效的 `skipWhen` | 轉場面板最上方「切點轉場」 | 3.22 |
 | 範圍匯出(只輸出時間軸上的一段) | `export/range.ts`、`createTimelineAudioStream({ startTime })`、`SceneExporter` 的 `range` | 匯出視窗「範圍」 | 3.20 |
 | 卡拉 OK 填色(選取字幕,高亮色由左向右蓋過底色) | `subtitles/karaoke.ts`、`KaraokeCommand`、`wipe.wgsl` 線性範圍 | 字幕面板「卡拉 OK 填色」 | 3.21 |
@@ -244,6 +245,10 @@
   - 效果面板會依參數的 `dependencies` 隱藏用不到的欄位。
   - 特效片段的名稱:新建時用定義的中文名稱;時間軸顯示用 `effects/display-name.ts`,
     舊版自動產生的英文名稱(`Film-grain`)會改顯示中文,使用者改過的名稱不變。
+- **PV 畫面效果**(`definitions/pv.ts`,2026-10-28):網點、雙色調、VHS 錄影帶、集中線、波浪扭曲、漏光、魚眼,每個一支 shader、單一 pass、只看當下這格的這個圖層(沒有歷史影格、沒有額外貼圖)。
+  uniform 只有 6 個可用浮點數(8 個扣掉 `resolution`),所以雙色調用「色相 + 共同飽和度」而不是兩個 RGB 色;集中線的中心固定在畫面中心。
+  強度為 0 時 `skipWhen` 成立不送 pass;會動的(VHS、集中線、波浪、漏光)用 `time` 驅動,集中線每秒換 12 組、VHS 每秒 24 次換雜訊,預覽與匯出相同。
+  **WGSL 注意**:naga 會檢查 `textureSample` 必須在「一致的控制流程」裡呼叫,不要在依每個像素而定的 `if` / 提早 `return` 之後取樣,分支用 `select`(這批 shader 都是這樣寫的)。
 - **效果組合**(`effects/presets.ts`,純資料,有測試):把幾個特效打包(衝擊、復古膠卷、電影感、賽博故障、夢幻柔光),
   特效面板上方點一下就在播放頭放入;每層一個特效片段,用 `timeline.insertElements`(`BatchCommand`)合成一個復原步驟,
   自動放軌(重疊的會分到不同軌道)。參數只寫覆寫值;新增組合時測試會檢查特效類型、參數 key 與範圍。

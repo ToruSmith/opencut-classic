@@ -5,6 +5,15 @@ import { lutEffectDefinition } from "./lut";
 import { wipeEffectDefinition } from "./wipe";
 import { cutMotionEffectDefinition } from "./cut-motion";
 import {
+	duotoneEffectDefinition,
+	fisheyeEffectDefinition,
+	halftoneEffectDefinition,
+	lightLeakEffectDefinition,
+	speedLinesEffectDefinition,
+	vhsEffectDefinition,
+	waveEffectDefinition,
+} from "./pv";
+import {
 	cameraShakeEffectDefinition,
 	glitchEffectDefinition,
 	mirrorEffectDefinition,
@@ -59,6 +68,13 @@ const defaultEffects = [
 	mirrorEffectDefinition,
 	wipeEffectDefinition,
 	cutMotionEffectDefinition,
+	halftoneEffectDefinition,
+	duotoneEffectDefinition,
+	vhsEffectDefinition,
+	speedLinesEffectDefinition,
+	waveEffectDefinition,
+	lightLeakEffectDefinition,
+	fisheyeEffectDefinition,
 ];
 
 export function registerDefaultEffects(): void {

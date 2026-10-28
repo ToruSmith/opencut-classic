@@ -43,6 +43,20 @@ const WIPE_SHADER_ID: &str = "wipe";
 const WIPE_SHADER_SOURCE: &str = include_str!("shaders/wipe.wgsl");
 const CUT_MOTION_SHADER_ID: &str = "cut-motion";
 const CUT_MOTION_SHADER_SOURCE: &str = include_str!("shaders/cut_motion.wgsl");
+const HALFTONE_SHADER_ID: &str = "halftone";
+const HALFTONE_SHADER_SOURCE: &str = include_str!("shaders/halftone.wgsl");
+const DUOTONE_SHADER_ID: &str = "duotone";
+const DUOTONE_SHADER_SOURCE: &str = include_str!("shaders/duotone.wgsl");
+const VHS_SHADER_ID: &str = "vhs";
+const VHS_SHADER_SOURCE: &str = include_str!("shaders/vhs.wgsl");
+const SPEED_LINES_SHADER_ID: &str = "speed-lines";
+const SPEED_LINES_SHADER_SOURCE: &str = include_str!("shaders/speed_lines.wgsl");
+const WAVE_SHADER_ID: &str = "wave";
+const WAVE_SHADER_SOURCE: &str = include_str!("shaders/wave.wgsl");
+const LIGHT_LEAK_SHADER_ID: &str = "light-leak";
+const LIGHT_LEAK_SHADER_SOURCE: &str = include_str!("shaders/light_leak.wgsl");
+const FISHEYE_SHADER_ID: &str = "fisheye";
+const FISHEYE_SHADER_SOURCE: &str = include_str!("shaders/fisheye.wgsl");
 
 /// 需要第二張貼圖(group 2)的 shader
 fn requires_texture(shader: &str) -> bool {
@@ -263,6 +277,34 @@ impl EffectPipeline {
             (
                 CUT_MOTION_SHADER_ID.to_string(),
                 build_pipeline("effects-cut-motion", CUT_MOTION_SHADER_SOURCE),
+            ),
+            (
+                HALFTONE_SHADER_ID.to_string(),
+                build_pipeline("effects-halftone", HALFTONE_SHADER_SOURCE),
+            ),
+            (
+                DUOTONE_SHADER_ID.to_string(),
+                build_pipeline("effects-duotone", DUOTONE_SHADER_SOURCE),
+            ),
+            (
+                VHS_SHADER_ID.to_string(),
+                build_pipeline("effects-vhs", VHS_SHADER_SOURCE),
+            ),
+            (
+                SPEED_LINES_SHADER_ID.to_string(),
+                build_pipeline("effects-speed-lines", SPEED_LINES_SHADER_SOURCE),
+            ),
+            (
+                WAVE_SHADER_ID.to_string(),
+                build_pipeline("effects-wave", WAVE_SHADER_SOURCE),
+            ),
+            (
+                LIGHT_LEAK_SHADER_ID.to_string(),
+                build_pipeline("effects-light-leak", LIGHT_LEAK_SHADER_SOURCE),
+            ),
+            (
+                FISHEYE_SHADER_ID.to_string(),
+                build_pipeline("effects-fisheye", FISHEYE_SHADER_SOURCE),
             ),
             (
                 LUT_SHADER_ID.to_string(),
@@ -697,6 +739,186 @@ fn pack_effect_uniforms(
             scalars: [
                 read_number_uniform(pass, "u_mode")?,
                 read_number_uniform(pass, "u_flip")?,
+                0.0,
+                0.0,
+            ],
+        });
+    }
+
+    if shader == HALFTONE_SHADER_ID {
+        reject_unknown_uniforms(
+            pass,
+            &[
+                "u_size",
+                "u_amount",
+                "u_angle",
+                "u_color",
+            ],
+        )?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [
+                0.0,
+                0.0,
+            ],
+            scalars: [
+                read_number_uniform(pass, "u_size")?,
+                read_number_uniform(pass, "u_amount")?,
+                read_number_uniform(pass, "u_angle")?,
+                read_number_uniform(pass, "u_color")?,
+            ],
+        });
+    }
+
+    if shader == DUOTONE_SHADER_ID {
+        reject_unknown_uniforms(
+            pass,
+            &[
+                "u_amount",
+                "u_saturation",
+                "u_contrast",
+                "u_shadow_hue",
+                "u_highlight_hue",
+            ],
+        )?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [
+                read_number_uniform(pass, "u_shadow_hue")?,
+                read_number_uniform(pass, "u_highlight_hue")?,
+            ],
+            scalars: [
+                read_number_uniform(pass, "u_amount")?,
+                read_number_uniform(pass, "u_saturation")?,
+                read_number_uniform(pass, "u_contrast")?,
+                0.0,
+            ],
+        });
+    }
+
+    if shader == VHS_SHADER_ID {
+        reject_unknown_uniforms(
+            pass,
+            &[
+                "u_intensity",
+                "u_scanlines",
+                "u_jitter",
+                "u_seed",
+                "u_time",
+            ],
+        )?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [
+                read_number_uniform(pass, "u_time")?,
+                0.0,
+            ],
+            scalars: [
+                read_number_uniform(pass, "u_intensity")?,
+                read_number_uniform(pass, "u_scanlines")?,
+                read_number_uniform(pass, "u_jitter")?,
+                read_number_uniform(pass, "u_seed")?,
+            ],
+        });
+    }
+
+    if shader == SPEED_LINES_SHADER_ID {
+        reject_unknown_uniforms(
+            pass,
+            &[
+                "u_intensity",
+                "u_count",
+                "u_inner",
+                "u_dark",
+                "u_time",
+                "u_seed",
+            ],
+        )?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [
+                read_number_uniform(pass, "u_time")?,
+                read_number_uniform(pass, "u_seed")?,
+            ],
+            scalars: [
+                read_number_uniform(pass, "u_intensity")?,
+                read_number_uniform(pass, "u_count")?,
+                read_number_uniform(pass, "u_inner")?,
+                read_number_uniform(pass, "u_dark")?,
+            ],
+        });
+    }
+
+    if shader == WAVE_SHADER_ID {
+        reject_unknown_uniforms(
+            pass,
+            &[
+                "u_amplitude",
+                "u_wavelength",
+                "u_speed",
+                "u_angle",
+                "u_time",
+            ],
+        )?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [
+                read_number_uniform(pass, "u_time")?,
+                0.0,
+            ],
+            scalars: [
+                read_number_uniform(pass, "u_amplitude")?,
+                read_number_uniform(pass, "u_wavelength")?,
+                read_number_uniform(pass, "u_speed")?,
+                read_number_uniform(pass, "u_angle")?,
+            ],
+        });
+    }
+
+    if shader == LIGHT_LEAK_SHADER_ID {
+        reject_unknown_uniforms(
+            pass,
+            &[
+                "u_intensity",
+                "u_hue",
+                "u_size",
+                "u_speed",
+                "u_time",
+                "u_seed",
+            ],
+        )?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [
+                read_number_uniform(pass, "u_time")?,
+                read_number_uniform(pass, "u_seed")?,
+            ],
+            scalars: [
+                read_number_uniform(pass, "u_intensity")?,
+                read_number_uniform(pass, "u_hue")?,
+                read_number_uniform(pass, "u_size")?,
+                read_number_uniform(pass, "u_speed")?,
+            ],
+        });
+    }
+
+    if shader == FISHEYE_SHADER_ID {
+        reject_unknown_uniforms(
+            pass,
+            &[
+                "u_strength",
+                "u_zoom",
+            ],
+        )?;
+        return Ok(EffectUniformBuffer {
+            resolution: [width as f32, height as f32],
+            direction: [
+                0.0,
+                0.0,
+            ],
+            scalars: [
+                read_number_uniform(pass, "u_strength")?,
+                read_number_uniform(pass, "u_zoom")?,
                 0.0,
                 0.0,
             ],
