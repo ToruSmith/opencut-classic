@@ -249,8 +249,8 @@
 - **變速曲線(階梯式近似)**(`retime/speed-ramp.ts` 純函式,有測試;`SpeedRampCommand`):把一個影片片段切成 N 段(素材長度相同),各段套不同的固定 `retime.rate`,總長度不變
   (各段倍率同乘 k = mean(1/m));曲線 = 漸快 / 漸慢 / 子彈時間(中間慢)/ 中間衝刺,強度 1 = 最慢最快相差 4 倍。倍率超過 0.01~5、或單段短於 0.1 秒時 `planSpeedRamp` 回 `ok: false`,介面停用按鈕並顯示原因。
   **為什麼不做連續曲線**:retime 格式只有單一倍率,連續曲線要動專案格式(要寫遷移),縮放 / 分割 / 裁切 / 音訊 / 代理檔都得改,而且沒有影格混合,慢速時本來就會一格一格,維護成本高、收益有限。
-  指令做法同 `QuickCutCommand`:直接呼叫 `SplitElementsCommand.execute()` 由後往前等分(左半保留原 id),之後只更新一次時間軸狀態(各段 retime / startTime / duration,最後一段吃掉進位誤差),`isSourceAudioEnabled: false`;一個復原步驟。
-  限制:只支援影片、聲音靜音、不做關鍵影格的時間重映射(片段上原有的動畫被切到對應段)、段數太多預覽會吃力(先建立代理檔)。
+  指令做法同 `QuickCutCommand`:直接呼叫 `SplitElementsCommand.execute()` 由後往前等分(左半保留原 id),之後只更新一次時間軸狀態(各段 retime / startTime / duration,最後一段吃掉進位誤差),原聲預設靜音(`isSourceAudioEnabled: false`),可選保留(變調 / `maintainPitch`,各段接縫聲音會跳);一個復原步驟。
+  限制:只支援影片、不做關鍵影格的時間重映射(片段上原有的動畫被切到對應段)、段數太多預覽會吃力(先建立代理檔)。
 - **PV 畫面效果**(`definitions/pv.ts`,2026-10-28):網點、雙色調、VHS 錄影帶、集中線、波浪扭曲、漏光、魚眼,每個一支 shader、單一 pass、只看當下這格的這個圖層(沒有歷史影格、沒有額外貼圖)。
   uniform 只有 6 個可用浮點數(8 個扣掉 `resolution`),所以雙色調用「色相 + 共同飽和度」而不是兩個 RGB 色;集中線的中心固定在畫面中心。
   強度為 0 時 `skipWhen` 成立不送 pass;會動的(VHS、集中線、波浪、漏光)用 `time` 驅動,集中線每秒換 12 組、VHS 每秒 24 次換雜訊,預覽與匯出相同。

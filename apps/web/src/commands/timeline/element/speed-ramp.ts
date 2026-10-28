@@ -15,9 +15,11 @@ import { SplitElementsCommand } from "./split-elements";
 /**
  * 變速曲線(階梯式):把一個影片片段切成 N 段(素材長度相同),各段套不同的固定倍率,總長度不變。
  * 規劃在 retime/speed-ramp.ts(純函式)。切割直接呼叫 SplitElementsCommand 的 execute()(由後往前,左半一直保留原 id),
- * 之後只更新一次時間軸狀態:每段的 retime / 開始時間 / 長度,聲音一律靜音(分段變速的聲音會一段一段跳)。
+ * 之後只更新一次時間軸狀態:每段的 retime / 開始時間 / 長度,聲音可選靜音 / 保留(變調或保持音高;分段變速的聲音接縫會跳)。
  * 復原時一次還原最初的軌道,所以是單一復原步驟。
  */
+export type SpeedRampAudioMode = "mute" | "pitch" | "keep-pitch";
+
 export class SpeedRampCommand extends Command {
 	private savedState: SceneTracks | null = null;
 	private pieceCount = 0;
@@ -31,6 +33,8 @@ export class SpeedRampCommand extends Command {
 			/** 0..1 */
 			strength: number;
 			segments: number;
+			/** mute = 靜音;pitch = 保留聲音、隨速度變調;keep-pitch = 保留聲音、保持音高 */
+			audio: SpeedRampAudioMode;
 		},
 	) {
 		super();
@@ -128,8 +132,8 @@ export class SpeedRampCommand extends Command {
 			edits.set(id, {
 				startTime: cursor,
 				duration: nextDuration,
-				retime: { rate, maintainPitch: false },
-				isSourceAudioEnabled: false,
+				retime: { rate, maintainPitch: this.params.audio === "keep-pitch" },
+				...(this.params.audio === "mute" ? { isSourceAudioEnabled: false } : {}),
 			});
 			cursor = addMediaTime({ a: cursor, b: nextDuration });
 		});
