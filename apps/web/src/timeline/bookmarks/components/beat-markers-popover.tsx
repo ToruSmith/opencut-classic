@@ -9,6 +9,7 @@ import { mediaTimeFromSeconds, TICKS_PER_SECOND } from "@/wasm";
 import { isBeatBookmark, pickSplitTimes } from "@/timeline/bookmarks/beat-markers";
 import type { MediaTime } from "@/wasm";
 import { DEFAULT_MAX_CUTS, planAutoCut } from "@/timeline/auto-cut";
+import { DuckingSection } from "@/timeline/components/ducking-section";
 
 /**
  * 節拍標記:分析時間軸的聲音,在重音或節拍位置加上橘色書籤。
@@ -472,6 +473,9 @@ export function BeatMarkersPopover({
 						{summary ?? `目前有 ${beatCount} 個節拍標記`}
 					</p>
 				)}
+				<div className="border-t pt-3">
+					<DuckingSection />
+				</div>
 			</PopoverContent>
 		</Popover>
 	);
