@@ -66,6 +66,55 @@ jobs:
         with:
           path: apps/web/dist
 
+      # 給下面的 e2e 用(upload-pages-artifact 的檔案是 tar,不方便直接取用)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site-dist
+          path: apps/web/dist
+          retention-days: 3
+
+  # 自動驗收:無頭 Chromium(軟體繪圖,不需要 GPU)開剛建好的網站,
+  # 匯入合成素材、排時間軸、播放,檢查畫面顏色 / 快取上限 / 錯誤並輸出效能數字。
+  # 不擋發佈(deploy 不依賴它):軟體繪圖環境可能有自己的限制,先當報告看。
+  # 結果在該 job 的 Summary 與 annotations,說明見 AGENTS.md「自動驗收」。
+  e2e:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: site-dist
+          path: site-dist
+
+      - name: 安裝 ffmpeg 與 Playwright
+        working-directory: apps/web/e2e
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: 產生合成素材
+        run: apps/web/e2e/make-fixtures.sh e2e-fixtures
+
+      - name: 執行驗收
+        working-directory: apps/web/e2e
+        run: node run.mjs --dist ../../../site-dist --fixtures ../../../e2e-fixtures --out ../../../e2e-out
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-report
+          path: e2e-out
+          retention-days: 7
+
   # 只有 ci 與 build 都成功才會發佈
   deploy:
     needs: [ci, build]

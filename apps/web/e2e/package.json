@@ -1,0 +1,9 @@
+{
+	"name": "opencut-e2e",
+	"private": true,
+	"type": "module",
+	"description": "自動驗收(無頭 Chromium、只用 CPU)。獨立於主專案的 lockfile,CI 裡才安裝。",
+	"dependencies": {
+		"playwright": "^1.50.0"
+	}
+}

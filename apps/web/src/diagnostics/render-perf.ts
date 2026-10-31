@@ -34,6 +34,7 @@ let framesSinceFlush = 0;
 declare global {
 	interface Window {
 		__renderPerf?: boolean;
+		__renderPerfSink?: unknown[];
 	}
 }
 
@@ -168,6 +169,15 @@ function flush(): void {
 		});
 	}
 	counterRows.sort((a, b) => Number(b.perFrame) - Number(a.perFrame));
+
+	// 自動驗收:不靠解析 console 輸出,直接把結構化摘要推進陣列
+	if (Array.isArray(window.__renderPerfSink)) {
+		window.__renderPerfSink.push({
+			frames: framesSinceFlush,
+			spans: spanRows,
+			counters: counterRows,
+		});
+	}
 
 	console.groupCollapsed(
 		`[render-perf] summary over ${framesSinceFlush} frames`,

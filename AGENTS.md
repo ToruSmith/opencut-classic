@@ -11,6 +11,7 @@
   - `deploy` 要等 `ci` 與 `build` **都成功**才會發佈。CI 失敗 = 不會發佈。
   - 全部通過才算完成。發佈後請依 `docs/qa-checklist.md` 在真實瀏覽器驗收(CI 抓不到畫面、聲音、效能的問題)。
   - 看結果:`gh run list --branch slim`;要讀 annotations 得先用 `gh run view <run_id> --json jobs --jq '.jobs[]|"\(.name) \(.databaseId)"'` 找 job id(CI 的 job 名稱是 `ci / build`、`ci / shaders`)。
+  - 另有 `e2e` job(接在 `build` 後,**不擋發佈**,`continue-on-error`):見下面「自動驗收」。
   - `slim-ci.yml` 也能手動觸發(`workflow_dispatch`),用來在不部署的情況下單獨跑 CI。
   - 完整日誌下載會被擋(403),但 **annotations 可以讀**:
     `gh api repos/ToruSmith/opencut-classic/check-runs/<job_id>/annotations --jq '.[] | "\(.title)\n\(.message)"'`
@@ -119,6 +120,19 @@
   預覽迴圈在**暫停後**會補渲染一次(`needsExactRenderRef`)。解碼器還沒有任何畫面時不走這條,照常等。
 - **復原 / 重做素材**:`AddMediaAssetCommand.undo` 與 `swapRestoredAsset` 會 `videoCache.clearVideo`,避免解碼器還綁著失效的舊 `File`。
 - **還沒做**(路線圖第 2 階段以後):音訊時鐘為主、場景索引取代整棵重建與深度比對、合成器每圖層 2 次全畫面 pass 的快速路徑、解碼搬進 Worker。
+
+## 自動驗收(無 GPU、給 AI 剪輯師與接手者用,2026-10-31)
+
+不必等使用者實機:CI 的 `e2e` job 用無頭 Chromium(SwiftShader 軟體繪圖)開剛建好的網站,自己驗收。**只讀程式碼與 CI 推論,第一次跑結果未知**,看 job 的 Summary / annotations 修正。
+
+- 檔案:`apps/web/e2e/`(`run.mjs` 執行器、`make-fixtures.sh` 合成素材:4 支純色 VP9 影片 + 60 張 PNG、`package.json` 只有 playwright)。
+- 測試掛鉤:網址帶 `?e2e` 時 `main.tsx` 才載入 `src/diagnostics/e2e-hook.ts`,提供 `window.__opencut`(建專案、匯入素材、排時間軸、seek / play / pause、讀狀態)。一般使用不會載入。
+  AI 剪輯師要操作編輯器也可以走這個掛鉤(不必點介面)。
+- 效能輸出:`window.__renderPerfSink = []` 後開 `__renderPerf`,每次 flush 會把摘要推進陣列(不只印 console)。
+- 情境:A 依序四段純色、每段中間暫停,畫面中心必須是該段顏色;B 60 段快剪連續播放 15 秒,檢查解碼器數 ≤ `MAX_ACTIVE_SINKS`、暫停後畫面是精確那一段;C 60 張圖,第一格快取不該全載入、播放時 ≤ 48;全程不得有致命錯誤。
+- 判斷對錯靠顏色 / 上限 / 錯誤(不隨速度變);**軟體繪圖的耗時數字不能和實機比**,只用來比較改動前後與抓異常。
+- 本機沒有 npm,不能跑;改動後推到 `slim` 看 `e2e` job(`gh run view <run_id> --json jobs` 找 job id,再讀 annotations;報告檔在 artifact `e2e-report`,日誌下載會被擋)。
+- 還沒涵蓋:音訊、匯出、復原 / 重做素材、真實 GPU 效能。這些仍依 `docs/qa-checklist.md`。
 
 ## 音訊匯出(分段處理)
 

@@ -24,6 +24,11 @@ export interface CachedImageSource {
 const MAX_CACHED_IMAGES = 48;
 const imageSourceCache = new Map<string, Promise<CachedImageSource>>();
 
+/** 目前快取了幾張圖(自動驗收用,確認不在時間範圍內的圖沒有被載入、也守住上限) */
+export function getImageCacheSize(): number {
+	return imageSourceCache.size;
+}
+
 export function loadImageSource({
 	url,
 	maxSourceSize,

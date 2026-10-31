@@ -41,6 +41,11 @@ function prefetchEditorWhenIdle() {
 	}
 }
 
+// 自動驗收(Playwright / AI 剪輯師):網址帶 ?e2e 才載入測試掛鉤,一般使用者不會下載這段
+if (new URLSearchParams(window.location.search).has("e2e")) {
+	void import("@/diagnostics/e2e-hook").then((module) => module.installE2eHook());
+}
+
 const root = document.getElementById("root");
 if (!root) throw new Error("找不到 #root 容器");
 
