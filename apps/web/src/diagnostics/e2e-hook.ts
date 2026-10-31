@@ -9,7 +9,7 @@
  */
 import { EditorCore } from "@/core";
 import { processMediaAssets } from "@/media/processing";
-import { buildElementFromMedia } from "@/timeline/element-utils";
+import { buildEffectElement, buildElementFromMedia } from "@/timeline/element-utils";
 import type { MediaAsset } from "@/media/types";
 import { getImageCacheSize } from "@/services/renderer/nodes/image-node";
 import { wasmCompositor } from "@/services/renderer/compositor/wasm-compositor";
@@ -117,6 +117,31 @@ const e2eApi = {
 		});
 		editor.timeline.insertElements({ items });
 		return cursor;
+	},
+
+	/** 在 `startSeconds` 起放 `count` 個特效片段(各 `seconds` 秒,依序排開),模擬使用者截圖裡殘留的特效軌 */
+	addEffects({
+		count,
+		startSeconds,
+		seconds,
+		effectType = "pixelate",
+	}: {
+		count: number;
+		startSeconds: number;
+		seconds: number;
+		effectType?: string;
+	}): number {
+		const editor = EditorCore.getInstance();
+		const items = Array.from({ length: count }, (_, index) => ({
+			element: buildEffectElement({
+				effectType,
+				startTime: mediaTimeFromSeconds({ seconds: startSeconds + index * seconds }),
+				duration: mediaTimeFromSeconds({ seconds }),
+			}),
+			placement: { mode: "auto" as const },
+		}));
+		editor.timeline.insertElements({ items });
+		return count;
 	},
 
 	/**
@@ -265,6 +290,19 @@ const e2eApi = {
 		);
 		all.sort((a, b) => a.startTime - b.startTime);
 		const doomed = all.slice(keep).map(({ trackId, elementId }) => ({ trackId, elementId }));
+		if (doomed.length > 0) editor.timeline.deleteElements({ elements: doomed });
+		return doomed.length;
+	},
+
+	/** 只刪有實際內容的片段(影片、圖片、音訊…),特效片段留著——重現「影片拿掉、特效殘留」 */
+	deleteContentClips(): number {
+		const editor = EditorCore.getInstance();
+		const scene = editor.scenes.getActiveScene().tracks;
+		const doomed = [...scene.overlay, scene.main, ...scene.audio].flatMap((track) =>
+			track.elements
+				.filter((element) => element.type !== "effect")
+				.map((element) => ({ trackId: track.id, elementId: element.id })),
+		);
 		if (doomed.length > 0) editor.timeline.deleteElements({ elements: doomed });
 		return doomed.length;
 	},

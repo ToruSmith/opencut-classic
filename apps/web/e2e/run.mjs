@@ -657,6 +657,40 @@ await scenario({
 });
 
 // ---------------------------------------------------------------------------
+// 情境 K:使用者截圖的情況——影片之後(與之下)還有特效片段,播放中把影片拿掉
+// 特效不該撐長時間軸:拿掉後總長 0、播放要停、播放頭回 0
+// ---------------------------------------------------------------------------
+await scenario({
+	name: "K-effects-leftover",
+	run: async () => {
+		const videoFiles = readdirSync(fixturesDir).filter((file) => file.startsWith("clip-") && file.endsWith(".webm")).sort();
+		await openEditor({ name: "e2e-effects-leftover", first: false });
+		const imported = await importFixtures({ names: videoFiles.slice(0, 1) });
+		const ids = imported.map((asset) => asset.id);
+		await evaluate((assetIds) => window.__opencut.buildSequential({ assetIds }), ids);
+		// 影片 6 秒;特效從 2 秒起排 20 個、各 10 秒,遠超過影片結尾
+		await evaluate(() => window.__opencut.addEffects({ count: 20, startSeconds: 2, seconds: 10 }));
+		const before = await evaluate(() => window.__opencut.state());
+		record({
+			name: "K1 特效不撐長總長",
+			ok: before.totalSeconds > 5.9 && before.totalSeconds < 6.2,
+			detail: `總長=${before.totalSeconds.toFixed(2)}s(影片 6 秒,特效排到 200 秒以外)`,
+		});
+		await evaluate(() => window.__opencut.seek({ seconds: 2 }));
+		await evaluate(() => window.__opencut.play());
+		await sleep(1200);
+		const removed = await evaluate(() => window.__opencut.deleteContentClips());
+		await sleep(2500);
+		const after = await evaluate(() => window.__opencut.state());
+		record({
+			name: "K2 播放中拿掉影片、只剩特效:停止播放、總長 0、播放頭回 0",
+			ok: removed > 0 && !after.isPlaying && after.totalSeconds === 0 && after.timeSeconds === 0,
+			detail: `移除=${removed} isPlaying=${after.isPlaying} 總長=${after.totalSeconds}s 播放頭=${after.timeSeconds.toFixed(2)}s;${await uiProbe()}`,
+		});
+	},
+});
+
+// ---------------------------------------------------------------------------
 // 情境 G:從素材庫刪掉正在用的素材(會連帶移除片段),播放與播放頭同樣必須停 / 縮回
 // ---------------------------------------------------------------------------
 await scenario({
