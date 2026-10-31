@@ -25,4 +25,16 @@ for n in $(seq 0 59); do
 		"$out/img-$(printf '%02d' "$n").png"
 done
 
+# 20 支不同顏色的小影片(2 秒),用來把解碼器逼到上限(MAX_ACTIVE_SINKS)驗證淘汰
+for n in $(seq 0 19); do
+	r=$(((n * 53 + 20) % 256))
+	g=$(((n * 97 + 60) % 256))
+	b=$(((n * 29 + 100) % 256))
+	hex=$(printf '%02x%02x%02x' "$r" "$g" "$b")
+	ffmpeg -y -loglevel error \
+		-f lavfi -i "color=c=0x${hex}:s=320x180:r=30:d=2" \
+		-c:v libvpx-vp9 -deadline realtime -cpu-used 8 -g 15 -b:v 100k -pix_fmt yuv420p \
+		"$out/many-$(printf '%02d' "$n").webm"
+done
+
 ls "$out" | wc -l | xargs echo "fixtures:"

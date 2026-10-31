@@ -125,11 +125,11 @@
 
 不必等使用者實機:CI 的 `e2e` job 用無頭 Chromium(SwiftShader 軟體繪圖)開剛建好的網站,自己驗收。**只讀程式碼與 CI 推論,第一次跑結果未知**,看 job 的 Summary / annotations 修正。
 
-- 檔案:`apps/web/e2e/`(`run.mjs` 執行器、`make-fixtures.sh` 合成素材:4 支純色 VP9 影片 + 60 張 PNG、`package.json` 只有 playwright)。
+- 檔案:`apps/web/e2e/`(`run.mjs` 執行器、`make-fixtures.sh` 合成素材:4 支純色 VP9 影片 + 20 支小影片 + 60 張 PNG、`package.json` 只有 playwright)。
 - 測試掛鉤:網址帶 `?e2e` 時 `main.tsx` 才載入 `src/diagnostics/e2e-hook.ts`,提供 `window.__opencut`(建專案、匯入素材、排時間軸、seek / play / pause、讀狀態)。一般使用不會載入。
   AI 剪輯師要操作編輯器也可以走這個掛鉤(不必點介面)。
 - 效能輸出:`window.__renderPerfSink = []` 後開 `__renderPerf`,每次 flush 會把摘要推進陣列(不只印 console)。
-- 情境:A 依序四段純色、每段中間暫停,畫面中心必須是該段顏色;B 60 段快剪連續播放 15 秒,檢查解碼器數 ≤ `MAX_ACTIVE_SINKS`、暫停後畫面是精確那一段;C 60 張圖,第一格快取不該全載入、播放時 ≤ 48;全程不得有致命錯誤。
+- 情境:A 依序四段純色、每段中間暫停,畫面中心必須是該段顏色;B 60 段快剪連續播放 15 秒,檢查解碼器數 ≤ `MAX_ACTIVE_SINKS`、暫停後畫面是精確那一段;C 60 張圖,第一格快取不該全載入、播放時 ≤ 48;D 20 支不同來源輪流快剪,解碼器數 ≤ 上限(逼出淘汰);全程不得有致命錯誤。
 - 判斷對錯靠顏色 / 上限 / 錯誤(不隨速度變);**軟體繪圖的耗時數字不能和實機比**,只用來比較改動前後與抓異常。
 - 本機沒有 npm,不能跑;改動後推到 `slim` 看 `e2e` job(`gh run view <run_id> --json jobs` 找 job id,再讀 annotations;報告檔在 artifact `e2e-report`,日誌下載會被擋)。
 - 還沒涵蓋:音訊、匯出、復原 / 重做素材、真實 GPU 效能。這些仍依 `docs/qa-checklist.md`。

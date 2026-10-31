@@ -274,7 +274,7 @@ await scenario({
 			ok: true,
 			detail: `isDegraded=${state0.isDegraded}(true 代表沒有可用的 GPU 繪圖,走降級路徑)`,
 		});
-		const videoFiles = readdirSync(fixturesDir).filter((file) => file.endsWith(".webm")).sort();
+		const videoFiles = readdirSync(fixturesDir).filter((file) => file.startsWith("clip-") && file.endsWith(".webm")).sort();
 		const imported = await importFixtures({ names: videoFiles });
 		record({
 			name: "A 匯入影片",
@@ -306,7 +306,7 @@ await scenario({
 	name: "B-fastcut",
 	run: async () => {
 		await openEditor({ name: "e2e-fastcut", first: false });
-		const videoFiles = readdirSync(fixturesDir).filter((file) => file.endsWith(".webm")).sort();
+		const videoFiles = readdirSync(fixturesDir).filter((file) => file.startsWith("clip-") && file.endsWith(".webm")).sort();
 		const imported = await importFixtures({ names: videoFiles });
 		const total = await evaluate(
 			(ids) => window.__opencut.buildFastCut({ assetIds: ids, count: 60, clipSeconds: 0.5 }),
@@ -420,6 +420,47 @@ await scenario({
 		});
 		const heap = (await evaluate(() => window.__opencut.state())).heapMB;
 		record({ name: "C 記憶體(僅記錄)", ok: true, detail: `JS heap ${heap} MB` });
+	},
+});
+
+// ---------------------------------------------------------------------------
+// 情境 D:20 支不同來源輪流快剪,解碼器數量必須被限制在上限(淘汰會被觸發)
+// ---------------------------------------------------------------------------
+await scenario({
+	name: "D-many-sources",
+	run: async () => {
+		await openEditor({ name: "e2e-many", first: false });
+		const files = readdirSync(fixturesDir).filter((file) => file.startsWith("many-") && file.endsWith(".webm")).sort();
+		const imported = await importFixtures({ names: files });
+		record({ name: "D 匯入多支影片", ok: imported.length === files.length && files.length >= 16, detail: `${imported.length} 支` });
+		await evaluate(
+			(ids) => window.__opencut.buildFastCut({ assetIds: ids, count: 40, clipSeconds: 0.5 }),
+			imported.map((asset) => asset.id),
+		);
+		await evaluate(() => window.__opencut.seek({ seconds: 0 }));
+		await sleep(2000);
+		await evaluate(() => window.__opencut.play());
+		let maxSinks = 0;
+		const startedAt = Date.now();
+		while (Date.now() - startedAt < 14000) {
+			const state = await evaluate(() => window.__opencut.state());
+			maxSinks = Math.max(maxSinks, state.videoSinks);
+			await sleep(400);
+		}
+		await evaluate(() => window.__opencut.pause());
+		const after = await evaluate(() => window.__opencut.state());
+		const limit = await evaluate(() => window.__opencut.maxActiveSinks);
+		record({ name: "D 播放有前進", ok: after.timeSeconds > 1, detail: `播放頭 ${after.timeSeconds.toFixed(2)}s` });
+		record({
+			name: "D 解碼器守住上限",
+			ok: maxSinks <= limit,
+			detail: `最多 ${maxSinks} 個(上限 ${limit};${files.length} 支來源,無上限時會到 ${files.length})`,
+		});
+		record({
+			name: "D 淘汰有被觸發(僅記錄)",
+			ok: true,
+			detail: maxSinks >= limit ? "有達到上限,淘汰運作中" : `只到 ${maxSinks},沒有逼到上限`,
+		});
 	},
 });
 
