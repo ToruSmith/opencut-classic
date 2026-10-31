@@ -151,7 +151,17 @@ async function openEditor({ name, first }) {
 		arg: id,
 		timeout: 90000,
 	});
-	if (!ready) throw new Error("專案沒有載入完成");
+	if (!ready) {
+		console.log("  專案沒有載入完成,重新載入再試一次");
+		await page.reload({ waitUntil: "load" });
+		const retry = await waitFor({
+			label: "專案載入(重試)",
+			fn: (projectId) => !!window.__opencut && window.__opencut.isProjectReady({ id: projectId }),
+			arg: id,
+			timeout: 90000,
+		});
+		if (!retry) throw new Error("專案沒有載入完成");
+	}
 	let marked = await waitFor({
 		label: "預覽畫布出現",
 		fn: () => window.__opencut.markPreviewCanvas(),
@@ -257,6 +267,28 @@ function summarizePerf({ sink }) {
 		resolveP95Ms: spanP95.resolve ?? null,
 		counters,
 	};
+}
+
+/** 讀介面上實際顯示的東西:時間文字、播放 / 暫停按鈕、預覽中心顏色 */
+async function uiProbe() {
+	const dom = await evaluate(() => {
+		const timeLike = /^\s*\d{1,2}:\d{2}([.:]\d{1,3})?(\s*\/\s*\d{1,2}:\d{2}([.:]\d{1,3})?)?\s*$/;
+		const texts = [];
+		const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+		while (walker.nextNode()) {
+			const value = walker.currentNode.textContent ?? "";
+			if (timeLike.test(value)) texts.push(value.trim());
+		}
+		const buttons = [...document.querySelectorAll("button")]
+			.map((button) => (button.getAttribute("aria-label") || button.getAttribute("title") || "").trim())
+			.filter((label) => /播放|暫停|play|pause/i.test(label));
+		return { texts: [...new Set(texts)].slice(0, 8), buttons: [...new Set(buttons)].slice(0, 4) };
+	});
+	let color = null;
+	try {
+		color = await sampleCenterColor();
+	} catch {}
+	return `介面時間=${JSON.stringify(dom.texts)} 按鈕=${JSON.stringify(dom.buttons)} 預覽中心=rgb(${color ? color.join(",") : "?"})`;
 }
 
 async function scenario({ name, run }) {
@@ -551,7 +583,7 @@ await scenario({
 		record({
 			name: "F1 播放中全部刪掉:停止播放、總長 0、播放頭回 0",
 			ok: !f1.isPlaying && f1.totalSeconds === 0 && f1.timeSeconds === 0,
-			detail: `isPlaying=${f1.isPlaying} 總長=${f1.totalSeconds}s 播放頭=${f1.timeSeconds.toFixed(2)}s`,
+			detail: `isPlaying=${f1.isPlaying} 總長=${f1.totalSeconds}s 播放頭=${f1.timeSeconds.toFixed(2)}s;${await uiProbe()}`,
 		});
 
 		// F2:暫停,播放頭在後面,刪掉後面幾段 → 播放頭不能超過新的總長
@@ -576,7 +608,7 @@ await scenario({
 		record({
 			name: "F3 播放中刪掉後段:播放頭不越過新總長、最後會停",
 			ok: !f3.isPlaying && f3.timeSeconds <= f3.totalSeconds + 0.05,
-			detail: `isPlaying=${f3.isPlaying} 總長=${f3.totalSeconds.toFixed(2)}s 播放頭=${f3.timeSeconds.toFixed(2)}s`,
+			detail: `isPlaying=${f3.isPlaying} 總長=${f3.totalSeconds.toFixed(2)}s 播放頭=${f3.timeSeconds.toFixed(2)}s;${await uiProbe()}`,
 		});
 
 		// F4:全刪後再按播放,不該開始跑
@@ -589,6 +621,50 @@ await scenario({
 			name: "F4 空時間軸按播放:不播放、播放頭 0",
 			ok: !f4.isPlaying && f4.timeSeconds === 0,
 			detail: `isPlaying=${f4.isPlaying} 播放頭=${f4.timeSeconds.toFixed(2)}s`,
+		});
+	},
+});
+
+// ---------------------------------------------------------------------------
+// 情境 G:從素材庫刪掉正在用的素材(會連帶移除片段),播放與播放頭同樣必須停 / 縮回
+// ---------------------------------------------------------------------------
+await scenario({
+	name: "G-remove-assets",
+	run: async () => {
+		const videoFiles = readdirSync(fixturesDir).filter((file) => file.startsWith("clip-") && file.endsWith(".webm")).sort();
+		await openEditor({ name: "e2e-remove-assets", first: false });
+		const imported = await importFixtures({ names: videoFiles });
+		const ids = imported.map((asset) => asset.id);
+
+		// G1:播放中,刪掉全部素材
+		await evaluate((assetIds) => window.__opencut.buildSequential({ assetIds }), ids);
+		await evaluate(() => window.__opencut.seek({ seconds: 8 }));
+		await evaluate(() => window.__opencut.play());
+		await sleep(1500);
+		await evaluate((assetIds) => window.__opencut.removeAssets({ ids: assetIds }), ids);
+		await sleep(3000);
+		const g1 = await evaluate(() => window.__opencut.state());
+		record({
+			name: "G1 播放中刪掉全部素材:停止播放、總長 0、播放頭回 0",
+			ok: !g1.isPlaying && g1.totalSeconds === 0 && g1.timeSeconds === 0,
+			detail: `isPlaying=${g1.isPlaying} 總長=${g1.totalSeconds}s 播放頭=${g1.timeSeconds.toFixed(2)}s 素材數=${g1.assetCount};${await uiProbe()}`,
+		});
+
+		// G2:只刪掉目前播放中的那支素材(green),其餘留著
+		const again = await importFixtures({ names: videoFiles });
+		const ids2 = again.map((asset) => asset.id);
+		await evaluate((assetIds) => window.__opencut.buildSequential({ assetIds }), ids2);
+		await evaluate(() => window.__opencut.seek({ seconds: 8 }));
+		await evaluate(() => window.__opencut.play());
+		await sleep(1000);
+		await evaluate((assetIds) => window.__opencut.removeAssets({ ids: [assetIds[1]] }), ids2);
+		await sleep(2500);
+		const g2 = await evaluate(() => window.__opencut.state());
+		await evaluate(() => window.__opencut.pause());
+		record({
+			name: "G2 播放中刪掉目前這支素材:播放頭仍在總長內",
+			ok: g2.timeSeconds <= g2.totalSeconds + 0.05,
+			detail: `isPlaying=${g2.isPlaying} 總長=${g2.totalSeconds.toFixed(2)}s 播放頭=${g2.timeSeconds.toFixed(2)}s;${await uiProbe()}`,
 		});
 	},
 });

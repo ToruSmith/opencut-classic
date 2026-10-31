@@ -260,6 +260,15 @@ const e2eApi = {
 		return doomed.length;
 	},
 
+	/** 從素材庫刪掉素材(會連帶移除時間軸上使用它的片段),走和介面相同的指令 */
+	removeAssets({ ids }: { ids: string[] }): void {
+		const editor = EditorCore.getInstance();
+		editor.media.removeMediaAssets({
+			projectId: editor.project.getActive().metadata.id,
+			ids,
+		});
+	},
+
 	seek({ seconds }: { seconds: number }): void {
 		EditorCore.getInstance().playback.seek({
 			time: mediaTimeFromSeconds({ seconds }),
