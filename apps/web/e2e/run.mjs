@@ -670,6 +670,43 @@ await scenario({
 });
 
 // ---------------------------------------------------------------------------
+// 情境 H:使用者回報的最單純情況:只放一支「有聲音」的影片,播放中把它拿掉
+// (時間軸變空,播放與時間不應繼續)。有聲音才會走音訊時鐘路徑。
+// ---------------------------------------------------------------------------
+await scenario({
+	name: "H-single-av-clip",
+	run: async () => {
+		for (const mode of ["clip", "asset"]) {
+			await openEditor({ name: `e2e-av-${mode}`, first: false });
+			const imported = await importFixtures({ names: ["av-clip.webm"] });
+			const ids = imported.map((asset) => asset.id);
+			await evaluate((assetIds) => window.__opencut.buildSequential({ assetIds }), ids);
+			await evaluate(() => window.__opencut.seek({ seconds: 1 }));
+			await evaluate(() => window.__opencut.play());
+			await sleep(2000);
+			const before = await evaluate(() => window.__opencut.state());
+			if (mode === "clip") {
+				await evaluate(() => window.__opencut.deleteClips({ keep: 0 }));
+			} else {
+				await evaluate((assetIds) => window.__opencut.removeAssets({ ids: assetIds }), ids);
+			}
+			const samples = [];
+			for (let i = 0; i < 4; i += 1) {
+				await sleep(700);
+				const state = await evaluate(() => window.__opencut.state());
+				samples.push(`${state.timeSeconds.toFixed(2)}${state.isPlaying ? "▶" : "■"}`);
+			}
+			const after = await evaluate(() => window.__opencut.state());
+			record({
+				name: `H 有聲音的單一片段,播放中${mode === "clip" ? "刪除片段" : "刪除素材"}:要停止、總長 0`,
+				ok: !after.isPlaying && after.totalSeconds === 0 && after.timeSeconds === 0,
+				detail: `刪除前 播放頭=${before.timeSeconds.toFixed(2)}s 播放中=${before.isPlaying};刪除後每 0.7s 取樣 ${samples.join(" ")};總長=${after.totalSeconds}s;${await uiProbe()}`,
+			});
+		}
+	},
+});
+
+// ---------------------------------------------------------------------------
 // 總結
 // ---------------------------------------------------------------------------
 record({

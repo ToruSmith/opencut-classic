@@ -37,4 +37,12 @@ for n in $(seq 0 19); do
 		"$out/many-$(printf '%02d' "$n").webm"
 done
 
+# 帶聲音的影片(紅畫面 + 440Hz 正弦波,6 秒):驗證有音訊的素材(會走音訊時鐘路徑)
+ffmpeg -y -loglevel error \
+	-f lavfi -i "color=c=red:s=640x360:r=30:d=6" \
+	-f lavfi -i "sine=frequency=440:sample_rate=48000:duration=6" \
+	-c:v libvpx-vp9 -deadline realtime -cpu-used 8 -g 15 -b:v 300k -pix_fmt yuv420p \
+	-c:a libopus -b:a 64k -shortest \
+	"$out/av-clip.webm"
+
 ls "$out" | wc -l | xargs echo "fixtures:"
