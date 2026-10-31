@@ -712,6 +712,37 @@ await scenario({
 });
 
 // ---------------------------------------------------------------------------
+// 情境 I:完全照使用者的操作:用鍵盤空白鍵播放、選取片段、按 Delete 刪除(走快捷鍵路徑)
+// ---------------------------------------------------------------------------
+await scenario({
+	name: "I-keyboard-path",
+	run: async () => {
+		await openEditor({ name: "e2e-keyboard", first: false });
+		const imported = await importFixtures({ names: ["av-clip.webm"] });
+		await evaluate((assetIds) => window.__opencut.buildSequential({ assetIds }), imported.map((asset) => asset.id));
+		await evaluate(() => window.__opencut.seek({ seconds: 0 }));
+		await page.mouse.click(800, 120); // 點一下空白處讓焦點在頁面上
+		await page.keyboard.press("Space");
+		await sleep(2000);
+		const before = await evaluate(() => window.__opencut.state());
+		const selected = await evaluate(() => window.__opencut.selectAllClips());
+		await page.keyboard.press("Delete");
+		const samples = [];
+		for (let i = 0; i < 4; i += 1) {
+			await sleep(700);
+			const state = await evaluate(() => window.__opencut.state());
+			samples.push(`${state.timeSeconds.toFixed(2)}${state.isPlaying ? "▶" : "■"}/${state.totalSeconds.toFixed(1)}s`);
+		}
+		const after = await evaluate(() => window.__opencut.state());
+		record({
+			name: "I 空白鍵播放 + 選取 + Delete 鍵:要停止、總長 0",
+			ok: before.isPlaying && selected > 0 && !after.isPlaying && after.totalSeconds === 0 && after.timeSeconds === 0,
+			detail: `刪除前 播放中=${before.isPlaying} 播放頭=${before.timeSeconds.toFixed(2)}s 選取=${selected};刪除後取樣 ${samples.join(" ")};${await uiProbe()}`,
+		});
+	},
+});
+
+// ---------------------------------------------------------------------------
 // 總結
 // ---------------------------------------------------------------------------
 record({

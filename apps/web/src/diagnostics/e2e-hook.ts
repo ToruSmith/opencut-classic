@@ -269,6 +269,17 @@ const e2eApi = {
 		});
 	},
 
+	/** 選取時間軸上全部片段(之後用鍵盤 Delete 走和使用者相同的快捷鍵路徑) */
+	selectAllClips(): number {
+		const editor = EditorCore.getInstance();
+		const scene = editor.scenes.getActiveScene().tracks;
+		const refs = [...scene.overlay, scene.main, ...scene.audio].flatMap((track) =>
+			track.elements.map((element) => ({ trackId: track.id, elementId: element.id })),
+		);
+		editor.selection.setSelectedElements({ elements: refs });
+		return refs.length;
+	},
+
 	seek({ seconds }: { seconds: number }): void {
 		EditorCore.getInstance().playback.seek({
 			time: mediaTimeFromSeconds({ seconds }),
