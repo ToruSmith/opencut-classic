@@ -201,7 +201,8 @@ const e2eApi = {
 		clipCount: number;
 	}> {
 		const editor = EditorCore.getInstance();
-		const tracks = editor.scenes.getActiveScene().tracks;
+		const scene = editor.scenes.getActiveScene().tracks;
+		const tracks = [...scene.overlay, scene.main, ...scene.audio];
 		const track = tracks.find((candidate) => candidate.elements.length > 0);
 		if (!track) throw new Error("時間軸沒有片段");
 		const target = track.elements[0];
