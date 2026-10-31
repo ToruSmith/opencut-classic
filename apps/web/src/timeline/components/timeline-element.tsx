@@ -74,6 +74,9 @@ import {
 	Exchange01Icon,
 	KeyframeIcon,
 	MagicWand05Icon,
+	Layers01Icon,
+	Unlink02Icon,
+	ArrowExpandIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { uppercase } from "@/utils/string";
@@ -438,6 +441,30 @@ export function TimelineElement({
 							Duplicate
 						</ActionMenuItem>
 					)}
+					{isCurrentElementSelected && (
+						<ActionMenuItem
+							action="create-compound"
+							icon={<HugeiconsIcon icon={Layers01Icon} />}
+						>
+							Create compound clip
+						</ActionMenuItem>
+					)}
+					{element.type === "compound" && selectedElements.length === 1 && (
+						<>
+							<ActionMenuItem
+								action="enter-compound"
+								icon={<HugeiconsIcon icon={ArrowExpandIcon} />}
+							>
+								Open compound clip
+							</ActionMenuItem>
+							<ActionMenuItem
+								action="ungroup-compound"
+								icon={<HugeiconsIcon icon={Unlink02Icon} />}
+							>
+								Break apart
+							</ActionMenuItem>
+						</>
+					)}
 					{canElementHaveAudio(element) && hasAudio && (
 						<MuteMenuItem
 							isMultipleSelected={selectedElements.length > 1}
@@ -581,6 +608,17 @@ function ElementInner({
 						className="absolute inset-0 size-full flex flex-col"
 						onClick={(event) => onElementClick({ event, element })}
 						onMouseDown={(event) => onElementMouseDown({ event, element })}
+						onDoubleClick={
+							element.type === "compound"
+								? (event: React.MouseEvent) => {
+										event.stopPropagation();
+										invokeAction("enter-compound", {
+											trackId: track.id,
+											elementId: element.id,
+										});
+									}
+								: undefined
+						}
 					>
 						<div
 							className={cn(
@@ -1178,7 +1216,25 @@ function ElementContent({ element, track }: ElementContentProps) {
 		case "video":
 		case "image":
 			return <TiledMediaContent element={element} track={track} />;
+		case "compound":
+			return <CompoundElementContent element={element} />;
 	}
+}
+
+function CompoundElementContent({
+	element,
+}: {
+	element: Extract<TimelineElementType, { type: "compound" }>;
+}) {
+	return (
+		<div className="flex size-full items-center justify-start gap-1 bg-[#B8873A] pl-2">
+			<HugeiconsIcon
+				icon={Layers01Icon}
+				className="size-4 shrink-0 text-white"
+			/>
+			<span className="truncate text-xs text-white">{element.name}</span>
+		</div>
+	);
 }
 
 function CopyMenuItem() {

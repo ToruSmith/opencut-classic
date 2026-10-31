@@ -43,6 +43,7 @@ import {
 	Layers01Icon,
 	Chart03Icon,
 	Unlink02Icon,
+	ArrowLeft01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { OcRippleIcon } from "@/components/icons";
@@ -248,9 +249,23 @@ function ToolbarLeftSection() {
 function SceneSelector() {
 	const editor = useEditor();
 	const currentScene = editor.scenes.getActiveScene();
+	const breadcrumb = useEditor((e) => e.scenes.getCompoundBreadcrumb());
+	const parentName =
+		breadcrumb.length >= 2 ? breadcrumb[breadcrumb.length - 2].name : null;
 
 	return (
-		<div>
+		<div className="flex items-center gap-2">
+			{currentScene?.kind === "compound" && (
+				<Button
+					variant="outline"
+					size="sm"
+					className="border-foreground/10 h-8"
+					onClick={() => invokeAction("exit-compound")}
+				>
+					<HugeiconsIcon icon={ArrowLeft01Icon} className="size-4" />
+					{parentName ? `Back to ${parentName}` : "Close compound clip"}
+				</Button>
+			)}
 			<SplitButton className="border-foreground/10 border">
 				<SplitButtonLeft>{currentScene?.name || "No Scene"}</SplitButtonLeft>
 				<SplitButtonSeparator />

@@ -17,7 +17,7 @@ export function registerTranscriptionDiagnostics({
 			const scene = editor.scenes.getActiveSceneOrNull();
 			if (!scene) return false;
 			return !timelineHasAudio({
-				tracks: scene.tracks,
+				tracks: editor.scenes.getPlaybackTracks({ tracks: scene.tracks }),
 				mediaAssets: editor.media.getAssets(),
 			});
 		},

@@ -1,5 +1,11 @@
 import type { EditorCore } from "@/core";
-import type { Bookmark, SceneTracks, TScene } from "@/timeline";
+import type {
+	Bookmark,
+	ElementRef,
+	SceneTracks,
+	TimelineElement,
+	TScene,
+} from "@/timeline";
 import { storageService } from "@/services/storage/service";
 import {
 	getMainScene,
@@ -21,14 +27,191 @@ import {
 	ToggleBookmarkCommand,
 	UpdateBookmarkCommand,
 } from "@/commands/scene";
-import type { MediaTime } from "@/wasm";
+import {
+	addMediaTime,
+	type MediaTime,
+	maxMediaTime,
+	minMediaTime,
+	subMediaTime,
+	ZERO_MEDIA_TIME,
+} from "@/wasm";
+import {
+	type CompoundFailureReason,
+	findScenesReferencingScene,
+	flattenCompoundTracks,
+	isCompoundElement,
+	syncCompoundSourceDurations,
+} from "@/timeline/compound";
+import {
+	type PlanResult,
+	planCreateCompound,
+	planUngroupCompound,
+	ScenesSnapshotCommand,
+} from "@/commands/timeline/compound";
+
+type CompoundActionResult =
+	| { ok: true }
+	| { ok: false; reason: CompoundFailureReason };
+
+interface CompoundNavigationEntry {
+	parentSceneId: string;
+	compoundElementId: string;
+}
 
 export class ScenesManager {
 	private active: TScene | null = null;
 	private list: TScene[] = [];
 	private listeners = new Set<() => void>();
+	/** Where the user came from when they opened compound clips (not saved). */
+	private compoundPath: CompoundNavigationEntry[] = [];
 
 	constructor(private editor: EditorCore) {}
+
+	createCompoundFromSelection({
+		elementRefs,
+	}: {
+		elementRefs: ElementRef[];
+	}): CompoundActionResult {
+		const activeScene = this.getActiveScene();
+		return this.applyPlan(
+			planCreateCompound({ scenes: this.list, activeScene, elementRefs }),
+			activeScene.id,
+		);
+	}
+
+	ungroupCompound({ ref }: { ref: ElementRef }): CompoundActionResult {
+		const activeScene = this.getActiveScene();
+		return this.applyPlan(
+			planUngroupCompound({ scenes: this.list, activeScene, ref }),
+			activeScene.id,
+		);
+	}
+
+	private applyPlan(
+		plan: PlanResult,
+		activeSceneId: string,
+	): CompoundActionResult {
+		if (!plan.ok) return plan;
+		this.editor.command.execute({
+			command: new ScenesSnapshotCommand(plan.change, activeSceneId),
+		});
+		return { ok: true };
+	}
+
+	/** Open a compound clip for editing, keeping the playhead on the same frame. */
+	async enterCompound({
+		ref,
+	}: {
+		ref: ElementRef;
+	}): Promise<CompoundActionResult> {
+		const activeScene = this.getActiveScene();
+		const element = [...activeScene.tracks.overlay, activeScene.tracks.main]
+			.find((track) => track.id === ref.trackId)
+			?.elements.find((candidate) => candidate.id === ref.elementId);
+		if (!element || !isCompoundElement(element)) {
+			return { ok: false, reason: "compound-not-found" };
+		}
+		if (!this.list.some((scene) => scene.id === element.sceneId)) {
+			return { ok: false, reason: "scene-not-found" };
+		}
+
+		const outerTime = this.editor.playback.getCurrentTime();
+		const clampedOuter = minMediaTime({
+			a: maxMediaTime({ a: outerTime, b: element.startTime }),
+			b: addMediaTime({ a: element.startTime, b: element.duration }),
+		});
+		const innerTime = addMediaTime({
+			a: subMediaTime({ a: clampedOuter, b: element.startTime }),
+			b: element.trimStart,
+		});
+
+		const path = [
+			...this.compoundPath,
+			{ parentSceneId: activeScene.id, compoundElementId: element.id },
+		];
+		await this.switchToScene({ sceneId: element.sceneId });
+		this.compoundPath = path;
+		this.notify();
+		this.editor.playback.seek({ time: innerTime });
+		return { ok: true };
+	}
+
+	/** Leave the compound clip that is open, back to where it was opened from. */
+	async exitCompound(): Promise<void> {
+		const active = this.getActiveScene();
+		if (active.kind !== "compound") return;
+
+		const entry = this.compoundPath[this.compoundPath.length - 1];
+		const parentId =
+			entry && this.list.some((scene) => scene.id === entry.parentSceneId)
+				? entry.parentSceneId
+				: (findScenesReferencingScene({
+						scenes: this.list,
+						sceneId: active.id,
+					})[0]?.id ?? getMainScene({ scenes: this.list })?.id);
+		if (!parentId) return;
+
+		const innerTime = this.editor.playback.getCurrentTime();
+		const path = entry ? this.compoundPath.slice(0, -1) : [];
+		await this.switchToScene({ sceneId: parentId });
+		this.compoundPath = path;
+		this.notify();
+
+		const parent = this.getActiveScene();
+		const clip = entry
+			? [...parent.tracks.overlay, parent.tracks.main]
+					.flatMap((track): TimelineElement[] => track.elements)
+					.find((element) => element.id === entry.compoundElementId)
+			: undefined;
+		if (clip) {
+			const offset = subMediaTime({ a: innerTime, b: clip.trimStart });
+			const clamped = minMediaTime({
+				a: maxMediaTime({ a: offset, b: ZERO_MEDIA_TIME }),
+				b: clip.duration,
+			});
+			this.editor.playback.seek({
+				time: addMediaTime({ a: clip.startTime, b: clamped }),
+			});
+		}
+	}
+
+	/** Names from the outermost scene down to the open compound clip. */
+	getCompoundBreadcrumb(): Array<{ sceneId: string; name: string }> {
+		const cache = this.breadcrumbCache;
+		if (
+			cache &&
+			cache.active === this.active &&
+			cache.list === this.list &&
+			cache.path === this.compoundPath
+		) {
+			return cache.value;
+		}
+
+		const active = this.active;
+		let value: Array<{ sceneId: string; name: string }> = [];
+		if (active && active.kind === "compound") {
+			const byId = new Map(this.list.map((scene) => [scene.id, scene]));
+			const crumbs = this.compoundPath
+				.map((entry) => byId.get(entry.parentSceneId))
+				.filter((scene): scene is TScene => scene !== undefined)
+				.map((scene) => ({ sceneId: scene.id, name: scene.name }));
+			value = [...crumbs, { sceneId: active.id, name: active.name }];
+		}
+		this.breadcrumbCache = {
+			active,
+			list: this.list,
+			path: this.compoundPath,
+			value,
+		};
+		return value;
+	}
+
+	private breadcrumbCache: {
+		active: TScene | null;
+		list: TScene[];
+		path: CompoundNavigationEntry[];
+		value: Array<{ sceneId: string; name: string }>;
+	} | null = null;
 
 	async createScene({
 		name,
@@ -53,7 +236,10 @@ export class ScenesManager {
 			throw new Error("Scene not found");
 		}
 
-		const { canDelete, reason } = canDeleteScene({ scene: sceneToDelete });
+		const { canDelete, reason } = canDeleteScene({
+			scene: sceneToDelete,
+			scenes: this.list,
+		});
 		if (!canDelete) {
 			throw new Error(reason);
 		}
@@ -85,17 +271,21 @@ export class ScenesManager {
 	}
 
 	async switchToScene({ sceneId }: { sceneId: string }): Promise<void> {
-		const targetScene = this.list.find((s) => s.id === sceneId);
-
-		if (!targetScene) {
+		if (!this.list.some((s) => s.id === sceneId)) {
 			throw new Error("Scene not found");
 		}
+
+		// Leaving a compound scene may have changed its length; keep every
+		// compound clip's resize bounds in line with its real contents.
+		this.list = syncCompoundSourceDurations({ scenes: this.list });
+		const targetScene = this.list.find((s) => s.id === sceneId) as TScene;
 
 		const activeProject = this.editor.project.getActive();
 
 		if (activeProject) {
 			const updatedProject = {
 				...activeProject,
+				scenes: this.list,
 				currentSceneId: sceneId,
 				metadata: {
 					...activeProject.metadata,
@@ -106,6 +296,7 @@ export class ScenesManager {
 			this.editor.project.setActiveProject({ project: updatedProject });
 		}
 
+		this.compoundPath = [];
 		this.active = targetScene;
 		this.notify();
 	}
@@ -252,6 +443,26 @@ export class ScenesManager {
 
 	getScenes(): TScene[] {
 		return this.list;
+	}
+
+	/**
+	 * Tracks as the renderer and audio mixer should see them: compound clips
+	 * expanded into ordinary elements. Defaults to the active scene.
+	 */
+	getPlaybackTracks({ tracks }: { tracks?: SceneTracks } = {}): SceneTracks {
+		const source = tracks ?? this.getActiveScene().tracks;
+		return flattenCompoundTracks({ tracks: source, scenes: this.list });
+	}
+
+	/**
+	 * The scene that export and the project thumbnail render. While the user is
+	 * inside a compound clip that is the main scene, so exporting from there
+	 * still produces the whole project.
+	 */
+	getExportScene(): TScene {
+		const active = this.getActiveScene();
+		if (active.kind !== "compound") return active;
+		return getMainScene({ scenes: this.list }) ?? active;
 	}
 
 	setScenes({

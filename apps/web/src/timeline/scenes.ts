@@ -1,4 +1,5 @@
 import type { TScene } from "@/timeline";
+import { findScenesReferencingScene } from "@/timeline/compound/graph";
 import { generateUUID } from "@/utils/id";
 import { calculateTotalDuration } from "@/timeline";
 import { MAIN_TRACK_NAME } from "@/timeline/placement/main-track";
@@ -46,12 +47,26 @@ export function buildDefaultScene({
 	};
 }
 
-export function canDeleteScene({ scene }: { scene: TScene }): {
+export function canDeleteScene({
+	scene,
+	scenes,
+}: {
+	scene: TScene;
+	/** All scenes in the project; needed to see whether compound clips use it. */
+	scenes: TScene[];
+}): {
 	canDelete: boolean;
 	reason?: string;
 } {
 	if (scene.isMain) {
 		return { canDelete: false, reason: "Cannot delete main scene" };
+	}
+	const users = findScenesReferencingScene({ scenes, sceneId: scene.id });
+	if (users.length > 0) {
+		return {
+			canDelete: false,
+			reason: `Used by a compound clip in ${users.map((user) => `"${user.name}"`).join(", ")}`,
+		};
 	}
 	return { canDelete: true };
 }

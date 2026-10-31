@@ -1,3 +1,4 @@
+import { calculateTotalDuration } from "@/timeline";
 import type { EditorCore } from "@/core";
 import type { RootNode } from "@/services/renderer/nodes/root-node";
 import type { ExportOptions, ExportResult } from "@/export";
@@ -150,7 +151,10 @@ export class RendererManager {
 		const { format, quality, fps, includeAudio } = options;
 
 		try {
-			const tracks = this.editor.scenes.getActiveScene().tracks;
+			const exportScene = this.editor.scenes.getExportScene();
+			const tracks = this.editor.scenes.getPlaybackTracks({
+				tracks: exportScene.tracks,
+			});
 			const mediaAssets = this.editor.media.getAssets();
 			const activeProject = this.editor.project.getActive();
 
@@ -158,7 +162,7 @@ export class RendererManager {
 				return { success: false, error: "No active project" };
 			}
 
-			const duration = this.editor.timeline.getTotalDuration();
+			const duration = calculateTotalDuration({ tracks: exportScene.tracks });
 			if (duration === 0) {
 				return { success: false, error: "Project is empty" };
 			}

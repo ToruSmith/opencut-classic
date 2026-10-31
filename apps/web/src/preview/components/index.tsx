@@ -10,6 +10,7 @@ import { CanvasRenderer } from "@/services/renderer/canvas-renderer";
 import { TICKS_PER_SECOND } from "@/wasm";
 import type { RootNode } from "@/services/renderer/nodes/root-node";
 import { buildScene } from "@/services/renderer/scene-builder";
+import { flattenCompoundTracks } from "@/timeline/compound";
 import { PreviewOverlayLayer } from "./overlay-layer";
 import { PreviewInteractionOverlay } from "./preview-interaction-overlay";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
@@ -97,6 +98,7 @@ function RenderTreeController() {
 	const tracks = useEditor(
 		(e) => e.timeline.getPreviewTracks() ?? e.scenes.getActiveScene().tracks,
 	);
+	const scenes = useEditor((e) => e.scenes.getScenes());
 	const mediaAssets = useEditor((e) => e.media.getAssets());
 	const activeProject = useEditor((e) => e.project.getActive());
 
@@ -107,7 +109,7 @@ function RenderTreeController() {
 
 		const duration = editor.timeline.getTotalDuration();
 		const renderTree = buildScene({
-			tracks,
+			tracks: flattenCompoundTracks({ tracks, scenes }),
 			mediaAssets,
 			duration,
 			canvasSize: { width, height },
@@ -116,7 +118,14 @@ function RenderTreeController() {
 		});
 
 		editor.renderer.setRenderTree({ renderTree });
-	}, [tracks, mediaAssets, activeProject?.settings.background, width, height]);
+	}, [
+		tracks,
+		scenes,
+		mediaAssets,
+		activeProject?.settings.background,
+		width,
+		height,
+	]);
 
 	return null;
 }

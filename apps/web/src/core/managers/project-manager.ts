@@ -1,3 +1,4 @@
+import { calculateTotalDuration } from "@/timeline";
 import type { EditorCore } from "@/core";
 import type {
 	TProject,
@@ -650,9 +651,12 @@ export class ProjectManager {
 	private async updateThumbnailFromTimeline(): Promise<boolean> {
 		if (!this.active) return false;
 
-		const tracks = this.editor.scenes.getActiveScene().tracks;
+		const exportScene = this.editor.scenes.getExportScene();
+		const tracks = this.editor.scenes.getPlaybackTracks({
+			tracks: exportScene.tracks,
+		});
 		const mediaAssets = this.editor.media.getAssets();
-		const duration = this.editor.timeline.getTotalDuration();
+		const duration = calculateTotalDuration({ tracks: exportScene.tracks });
 		const { canvasSize, background } = this.active.settings;
 
 		const scene = buildScene({

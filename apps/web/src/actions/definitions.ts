@@ -102,6 +102,23 @@ export const ACTIONS = {
 		description: "Extract or recover source audio",
 		category: "editing",
 	},
+	"create-compound": {
+		description: "Create compound clip from selection",
+		category: "editing",
+	},
+	"ungroup-compound": {
+		description: "Break apart compound clip",
+		category: "editing",
+	},
+	"enter-compound": {
+		description: "Open compound clip",
+		category: "timeline",
+		args: { trackId: "string", elementId: "string" },
+	},
+	"exit-compound": {
+		description: "Close compound clip",
+		category: "timeline",
+	},
 	"select-all": {
 		description: "Select all elements",
 		category: "selection",
