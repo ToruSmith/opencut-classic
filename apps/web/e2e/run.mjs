@@ -140,6 +140,9 @@ async function openEditor({ name, first }) {
 			timeout: 60000,
 		});
 		if (!hookReady) throw new Error("測試掛鉤沒有載入(window.__opencut 不存在)");
+		// 剛載入時儲存層(IndexedDB 遷移、OPFS)可能還在初始化,太早建專案偶爾會卡住
+		await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
+		await sleep(4000);
 	}
 	const id = await evaluate((projectName) => window.__opencut.createProject({ name: projectName }), name);
 	await evaluate((projectId) => {
@@ -160,7 +163,16 @@ async function openEditor({ name, first }) {
 			arg: id,
 			timeout: 90000,
 		});
-		if (!retry) throw new Error("專案沒有載入完成");
+		if (!retry) {
+			const diag = await page
+				.evaluate(() => ({
+					url: location.href,
+					text: (document.body.innerText || "").replace(/\s+/g, " ").slice(0, 200),
+					hook: !!window.__opencut,
+				}))
+				.catch((error) => ({ error: String(error) }));
+			throw new Error(`專案沒有載入完成 ${JSON.stringify(diag)}`);
+		}
 	}
 	let marked = await waitFor({
 		label: "預覽畫布出現",
