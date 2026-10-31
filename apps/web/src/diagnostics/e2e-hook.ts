@@ -243,6 +243,23 @@ const e2eApi = {
 		return { editMs, baselineMs, longTasksMs, clipCount };
 	},
 
+	/** 刪除時間軸上的片段:`keep` = 保留前幾個(依開始時間),其餘全部刪掉;0 = 全刪。回傳刪掉幾個 */
+	deleteClips({ keep }: { keep: number }): number {
+		const editor = EditorCore.getInstance();
+		const scene = editor.scenes.getActiveScene().tracks;
+		const all = [...scene.overlay, scene.main, ...scene.audio].flatMap((track) =>
+			track.elements.map((element) => ({
+				trackId: track.id,
+				elementId: element.id,
+				startTime: element.startTime,
+			})),
+		);
+		all.sort((a, b) => a.startTime - b.startTime);
+		const doomed = all.slice(keep).map(({ trackId, elementId }) => ({ trackId, elementId }));
+		if (doomed.length > 0) editor.timeline.deleteElements({ elements: doomed });
+		return doomed.length;
+	},
+
 	seek({ seconds }: { seconds: number }): void {
 		EditorCore.getInstance().playback.seek({
 			time: mediaTimeFromSeconds({ seconds }),

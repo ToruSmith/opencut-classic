@@ -530,6 +530,70 @@ await scenario({
 });
 
 // ---------------------------------------------------------------------------
+// 情境 F:把片段從時間軸拿掉之後,播放與播放頭必須跟著停 / 縮回(使用者回報的疑似 bug)
+// ---------------------------------------------------------------------------
+await scenario({
+	name: "F-delete-clips",
+	run: async () => {
+		const videoFiles = readdirSync(fixturesDir).filter((file) => file.startsWith("clip-") && file.endsWith(".webm")).sort();
+		await openEditor({ name: "e2e-delete", first: false });
+		const imported = await importFixtures({ names: videoFiles });
+		const ids = imported.map((asset) => asset.id);
+
+		// F1:播放中,全部刪掉
+		await evaluate((assetIds) => window.__opencut.buildSequential({ assetIds }), ids);
+		await evaluate(() => window.__opencut.seek({ seconds: 8 }));
+		await evaluate(() => window.__opencut.play());
+		await sleep(1500);
+		await evaluate(() => window.__opencut.deleteClips({ keep: 0 }));
+		await sleep(2500);
+		const f1 = await evaluate(() => window.__opencut.state());
+		record({
+			name: "F1 播放中全部刪掉:停止播放、總長 0、播放頭回 0",
+			ok: !f1.isPlaying && f1.totalSeconds === 0 && f1.timeSeconds === 0,
+			detail: `isPlaying=${f1.isPlaying} 總長=${f1.totalSeconds}s 播放頭=${f1.timeSeconds.toFixed(2)}s`,
+		});
+
+		// F2:暫停,播放頭在後面,刪掉後面幾段 → 播放頭不能超過新的總長
+		await evaluate((assetIds) => window.__opencut.buildSequential({ assetIds }), ids);
+		await evaluate(() => window.__opencut.seek({ seconds: 20 }));
+		await evaluate(() => window.__opencut.deleteClips({ keep: 2 }));
+		await sleep(1500);
+		const f2 = await evaluate(() => window.__opencut.state());
+		record({
+			name: "F2 暫停時刪掉後段:播放頭不超過新總長",
+			ok: f2.totalSeconds > 11 && f2.totalSeconds < 13 && f2.timeSeconds <= f2.totalSeconds + 0.05,
+			detail: `總長=${f2.totalSeconds.toFixed(2)}s 播放頭=${f2.timeSeconds.toFixed(2)}s`,
+		});
+
+		// F3:播放中刪掉播放頭所在與之後的片段(留前 1 段 6 秒)→ 必須停下,不能繼續跑
+		await evaluate(() => window.__opencut.seek({ seconds: 3 }));
+		await evaluate(() => window.__opencut.play());
+		await sleep(800);
+		await evaluate(() => window.__opencut.deleteClips({ keep: 1 }));
+		await sleep(5000);
+		const f3 = await evaluate(() => window.__opencut.state());
+		record({
+			name: "F3 播放中刪掉後段:播放頭不越過新總長、最後會停",
+			ok: !f3.isPlaying && f3.timeSeconds <= f3.totalSeconds + 0.05,
+			detail: `isPlaying=${f3.isPlaying} 總長=${f3.totalSeconds.toFixed(2)}s 播放頭=${f3.timeSeconds.toFixed(2)}s`,
+		});
+
+		// F4:全刪後再按播放,不該開始跑
+		await evaluate(() => window.__opencut.deleteClips({ keep: 0 }));
+		await sleep(800);
+		await evaluate(() => window.__opencut.play());
+		await sleep(1500);
+		const f4 = await evaluate(() => window.__opencut.state());
+		record({
+			name: "F4 空時間軸按播放:不播放、播放頭 0",
+			ok: !f4.isPlaying && f4.timeSeconds === 0,
+			detail: `isPlaying=${f4.isPlaying} 播放頭=${f4.timeSeconds.toFixed(2)}s`,
+		});
+	},
+});
+
+// ---------------------------------------------------------------------------
 // 總結
 // ---------------------------------------------------------------------------
 record({
