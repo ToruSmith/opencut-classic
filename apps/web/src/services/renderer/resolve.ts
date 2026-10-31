@@ -20,6 +20,7 @@ import {
 import { resolveColorAtTime, resolveOpacityAtTime } from "@/animation/values";
 import { resolveTransformAtTime } from "@/rendering/animation-values";
 import { videoCache } from "@/services/video-cache/service";
+import { isWithinPrewarmWindow } from "@/services/cache-policy";
 import type { CanvasRenderer } from "./canvas-renderer";
 import type { AnyBaseNode } from "./nodes/base-node";
 import {
@@ -44,6 +45,9 @@ import type {
 	ResolvedVisualSourceNodeState,
 	VisualNodeParams,
 } from "./nodes/visual-node";
+
+/** 片段開始前多久就先把素材準備好(tick) */
+const PREWARM_LOOKAHEAD = TICKS_PER_SECOND;
 
 type ResolveContext = {
 	renderer: CanvasRenderer;
@@ -214,7 +218,27 @@ async function resolveVideoNode({
 	context: ResolveContext;
 }): Promise<ResolvedVisualSourceNodeState | null> {
 	const clipTime = context.time - node.params.timeOffset;
+	const maxSize = context.renderer.getVideoDecodeLimit();
 	if (clipTime < 0 || clipTime >= node.params.duration) {
+		// 預覽時,快輪到的片段先開好解碼器(不等到切點那一格才開檔、定位)
+		if (
+			maxSize !== undefined &&
+			isWithinPrewarmWindow({ clipTime, lookahead: PREWARM_LOOKAHEAD })
+		) {
+			const startTicks =
+				node.params.trimStart +
+				getSourceTimeAtClipTime({ clipTime: 0, retime: node.params.retime });
+			void videoCache.prewarm({
+				...pickVideoSource({
+					mediaId: node.params.mediaId,
+					file: node.params.file,
+					proxyFile: node.params.proxyFile,
+					isPreview: true,
+				}),
+				time: mediaTimeToSeconds({ time: roundMediaTime({ time: startTicks }) }),
+				maxSize,
+			});
+		}
 		return null;
 	}
 
@@ -224,7 +248,6 @@ async function resolveVideoNode({
 			clipTime,
 			retime: node.params.retime,
 		});
-	const maxSize = context.renderer.getVideoDecodeLimit();
 	const time = mediaTimeToSeconds({ time: roundMediaTime({ time: sourceTimeTicks }) });
 	const source = pickVideoSource({
 		mediaId: node.params.mediaId,
@@ -232,8 +255,14 @@ async function resolveVideoNode({
 		proxyFile: node.params.proxyFile,
 		isPreview: maxSize !== undefined,
 	});
+	const decodeWait = {
+		maxWaitMs: context.renderer.maxDecodeWaitMs,
+		onStale: () => {
+			context.renderer.usedStaleFrame = true;
+		},
+	};
 	let frame = await videoCache
-		.getFrameAt({ ...source, time, maxSize })
+		.getFrameAt({ ...source, time, maxSize, ...decodeWait })
 		.catch((error) => {
 			// 代理檔讀不到時改讀原始檔;原始檔本身的錯誤照常丟出
 			if (source.file === node.params.file) throw error;
@@ -245,6 +274,7 @@ async function resolveVideoNode({
 			file: node.params.file,
 			time,
 			maxSize,
+			...decodeWait,
 		});
 	}
 	if (!frame) {
@@ -276,6 +306,18 @@ async function resolveImageNode({
 	node: ImageNode;
 	context: ResolveContext;
 }): Promise<ResolvedVisualSourceNodeState | null> {
+	// 不在時間範圍內的圖片不載入(以前整條時間軸的圖片第一格就全部解碼並常駐記憶體);
+	// 快輪到的先在背景載入,不等到出現那一格
+	const clipTime = context.time - node.params.timeOffset;
+	if (clipTime < 0 || clipTime >= node.params.duration) {
+		if (isWithinPrewarmWindow({ clipTime, lookahead: PREWARM_LOOKAHEAD })) {
+			void loadImageSource({
+				url: node.params.url,
+				maxSourceSize: node.params.maxSourceSize,
+			}).catch(() => {});
+		}
+		return null;
+	}
 	const source = await loadImageSource({
 		url: node.params.url,
 		maxSourceSize: node.params.maxSourceSize,
@@ -305,6 +347,15 @@ async function resolveStickerNode({
 	node: StickerNode;
 	context: ResolveContext;
 }): Promise<ResolvedVisualSourceNodeState | null> {
+	const clipTime = context.time - node.params.timeOffset;
+	if (clipTime < 0 || clipTime >= node.params.duration) {
+		if (isWithinPrewarmWindow({ clipTime, lookahead: PREWARM_LOOKAHEAD })) {
+			void loadStickerSource({ stickerId: node.params.stickerId }).catch(
+				() => {},
+			);
+		}
+		return null;
+	}
 	const source = await loadStickerSource({ stickerId: node.params.stickerId });
 	const sourceWidth = node.params.intrinsicWidth ?? source.width;
 	const sourceHeight = node.params.intrinsicHeight ?? source.height;

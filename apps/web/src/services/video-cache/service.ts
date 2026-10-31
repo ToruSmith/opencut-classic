@@ -1,4 +1,12 @@
 import type { CanvasSink, Input, WrappedCanvas } from "mediabunny";
+import { pickEvictions } from "@/services/cache-policy";
+
+/**
+ * 同時保留的解碼器上限。每個解碼器佔一個硬體解碼實例與 3 張畫布,
+ * 瀏覽器的硬體解碼實例有限,素材很多(自動排片、快剪)時沒有上限會越積越多。
+ * 超過時淘汰最久沒用、而且沒有請求排隊的那個;被淘汰的素材之後用到時會重新開啟。
+ */
+export const MAX_ACTIVE_SINKS = 12;
 
 interface VideoSinkData {
 	input: Input;
@@ -9,6 +17,10 @@ interface VideoSinkData {
 	lastTime: number;
 	prefetching: boolean;
 	prefetchPromise: Promise<void> | null;
+	/** 最後一次被請求的時間(performance.now),淘汰用 */
+	lastUsed: number;
+	/** 還在排隊或處理中的請求數;大於 0 不可淘汰 */
+	inflight: number;
 }
 
 /** 預覽時解碼的最大尺寸(通常是專案畫布大小);省略代表用影片原始解析度(匯出) */
@@ -32,18 +44,30 @@ export class VideoCache {
 	private initPromises = new Map<string, Promise<void>>();
 	private frameChain = new Map<string, Promise<unknown>>();
 	private seekGenerations = new Map<string, number>();
+	/** 預熱失敗的素材先停一陣子再試,避免每格都重新開檔 */
+	private prewarmBackoffUntil = new Map<string, number>();
 
 	async getFrameAt({
 		mediaId,
 		file,
 		time,
 		maxSize,
+		maxWaitMs,
+		onStale,
 	}: {
 		mediaId: string;
 		file: File;
 		time: number;
 		/** 預覽用:把解碼後的畫面縮到不超過這個尺寸,大幅減少 4K 素材的解碼後處理與紋理上傳量 */
 		maxSize?: VideoDecodeLimit;
+		/**
+		 * 播放中用:解碼超過這個時間還沒好,就先回傳這個解碼器目前的那一格(解碼在背景繼續),
+		 * 不讓整格畫面等一個慢的素材。暫停 / 拖曳時不要給,才會拿到精確的那一格。
+		 * 這個解碼器還沒有任何畫面時仍會等。
+		 */
+		maxWaitMs?: number;
+		/** 回傳的是舊的那一格(超時)時呼叫,讓呼叫端知道暫停後要補渲染 */
+		onStale?: () => void;
 	}): Promise<WrappedCanvas | null> {
 		// 預覽與匯出各用自己的解碼器,互不搶同一個 iterator
 		const key = getSinkKey({ mediaId, maxSize });
@@ -51,6 +75,9 @@ export class VideoCache {
 
 		const sinkData = this.sinks.get(key);
 		if (!sinkData) return null;
+
+		sinkData.lastUsed = performance.now();
+		sinkData.inflight += 1;
 
 		const generation = (this.seekGenerations.get(key) ?? 0) + 1;
 		this.seekGenerations.set(key, generation);
@@ -62,11 +89,95 @@ export class VideoCache {
 			}
 			return this.resolveFrame({ sinkData, time });
 		});
-		this.frameChain.set(
-			key,
-			current.catch(() => {}),
-		);
-		return current;
+		const settled = current.catch(() => {});
+		this.frameChain.set(key, settled);
+		void settled.then(() => {
+			sinkData.inflight = Math.max(0, sinkData.inflight - 1);
+		});
+
+		this.evictExcess({ keep: key });
+
+		const stale = sinkData.currentFrame;
+		if (maxWaitMs === undefined || !stale) {
+			return current;
+		}
+
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const timeout = new Promise<"timeout">((resolve) => {
+			timer = setTimeout(() => resolve("timeout"), maxWaitMs);
+		});
+		try {
+			const winner = await Promise.race([current, timeout]);
+			if (winner === "timeout") {
+				onStale?.();
+				return stale;
+			}
+			return winner;
+		} finally {
+			if (timer !== undefined) clearTimeout(timer);
+		}
+	}
+
+	/**
+	 * 片段快開始前先把解碼器準備好(開檔、解析軌道),不會移動已經在用的解碼器:
+	 * 同一個素材被切成很多段時,它們共用一個解碼器,這裡不能把它 seek 走。
+	 * 只有解碼器剛建好、還沒有任何畫面時,才順便解起點那一格。
+	 */
+	async prewarm({
+		mediaId,
+		file,
+		time,
+		maxSize,
+	}: {
+		mediaId: string;
+		file: File;
+		time: number;
+		maxSize?: VideoDecodeLimit;
+	}): Promise<void> {
+		const key = getSinkKey({ mediaId, maxSize });
+		const now = performance.now();
+		if ((this.prewarmBackoffUntil.get(key) ?? 0) > now) return;
+		try {
+			await this.ensureSink({ key, file, maxSize });
+			const sinkData = this.sinks.get(key);
+			if (!sinkData) return;
+			sinkData.lastUsed = performance.now();
+			if (!sinkData.iterator && !sinkData.currentFrame && sinkData.inflight === 0) {
+				await this.getFrameAt({ mediaId, file, time, maxSize });
+			}
+		} catch {
+			// 預熱失敗不影響播放;真的需要畫面時會再試並照常回報錯誤
+			this.prewarmBackoffUntil.set(key, now + 5000);
+		}
+	}
+
+	/** 解碼器超過上限時淘汰最久沒用、且沒有請求排隊的 */
+	private evictExcess({ keep }: { keep?: string }): void {
+		const victims = pickEvictions({
+			entries: [...this.sinks.entries()].map(([key, data]) => ({
+				key,
+				lastUsed: data.lastUsed,
+				busy: data.inflight > 0 || this.initPromises.has(key),
+			})),
+			max: MAX_ACTIVE_SINKS,
+			keep,
+		});
+		for (const key of victims) {
+			this.disposeSink({ key });
+		}
+	}
+
+	private disposeSink({ key }: { key: string }): void {
+		const sinkData = this.sinks.get(key);
+		if (sinkData?.iterator) {
+			void sinkData.iterator.return();
+		}
+		sinkData?.input.dispose();
+		this.sinks.delete(key);
+		this.initPromises.delete(key);
+		this.frameChain.delete(key);
+		this.seekGenerations.delete(key);
+		this.prewarmBackoffUntil.delete(key);
 	}
 
 	private async resolveFrame({
@@ -326,6 +437,8 @@ export class VideoCache {
 				lastTime: -1,
 				prefetching: false,
 				prefetchPromise: null,
+				lastUsed: performance.now(),
+				inflight: 0,
 			});
 		} catch (error) {
 			input.dispose();
@@ -340,12 +453,7 @@ export class VideoCache {
 			key === mediaId || key.startsWith(`${mediaId}@`);
 
 		for (const key of [...this.sinks.keys()].filter(belongsToMedia)) {
-			const sinkData = this.sinks.get(key);
-			if (sinkData?.iterator) {
-				void sinkData.iterator.return();
-			}
-			sinkData?.input.dispose();
-			this.sinks.delete(key);
+			this.disposeSink({ key });
 		}
 
 		for (const map of [

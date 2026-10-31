@@ -28,6 +28,13 @@ export class CanvasRenderer {
 	height: number;
 	fps: FrameRate;
 	quality: "preview" | "full";
+	/**
+	 * 播放中的預覽用:影片解碼超過這個毫秒數還沒好,先用該素材目前的那一格,不讓整格等。
+	 * 暫停、拖曳、匯出時留空(要精確的那一格)。
+	 */
+	maxDecodeWaitMs?: number;
+	/** 上一次 render 有沒有用到「舊的那一格」;呼叫端暫停後要補渲染一次 */
+	usedStaleFrame = false;
 
 	constructor({ width, height, fps, quality = "full" }: CanvasRendererParams) {
 		this.width = width;

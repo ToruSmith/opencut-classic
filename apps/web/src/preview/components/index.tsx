@@ -151,6 +151,8 @@ function PreviewCanvas({
 	const lastFrameRef = useRef(-1);
 	const lastSceneRef = useRef<RootNode | null>(null);
 	const renderingRef = useRef(false);
+	// 上一格播放中用了「舊的那一格」(解碼來不及);暫停後要補渲染一次,才會停在精確的畫面
+	const needsExactRenderRef = useRef(false);
 	const { width: nativeWidth, height: nativeHeight } = usePreviewSize();
 	const viewportSize = useContainerSize({ containerRef: viewportRef });
 	const editor = useEditor();
@@ -209,9 +211,11 @@ function PreviewCanvas({
 		);
 		const frame = Math.floor(renderTime / ticksPerFrame);
 
+		const isPlaying = editor.playback.getIsPlaying();
 		if (
 			frame === lastFrameRef.current &&
-			renderTree === lastSceneRef.current
+			renderTree === lastSceneRef.current &&
+			!(needsExactRenderRef.current && !isPlaying)
 		) {
 			return;
 		}
@@ -219,6 +223,13 @@ function PreviewCanvas({
 		renderingRef.current = true;
 		lastSceneRef.current = renderTree;
 		lastFrameRef.current = frame;
+		// 播放中:慢的素材最多等 3 格就先用舊的一格;暫停 / 拖曳:等精確的那一格
+		const frameMs = (1000 * renderer.fps.denominator) / renderer.fps.numerator;
+		renderer.maxDecodeWaitMs =
+			isPlaying && !editor.playback.getIsScrubbing()
+				? Math.max(30, Math.round(frameMs * 3))
+				: undefined;
+		renderer.usedStaleFrame = false;
 		// 渲染失敗時也要放開旗標,否則預覽會永遠停在這一格
 		void measureSpanAsync({
 			name: "previewFrame",
@@ -229,6 +240,7 @@ function PreviewCanvas({
 			})
 			.finally(() => {
 				renderingRef.current = false;
+				needsExactRenderRef.current = renderer.usedStaleFrame;
 			});
 	}, [renderer, renderTree, editor.playback, editor.timeline]);
 

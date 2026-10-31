@@ -1,3 +1,4 @@
+import { touchLru, trimLru } from "@/services/cache-policy";
 import { resolveStickerId } from "@/stickers";
 import {
 	VisualNode,
@@ -17,6 +18,7 @@ interface CachedStickerSource {
 	height: number;
 }
 
+const MAX_CACHED_STICKERS = 64;
 const stickerSourceCache = new Map<string, Promise<CachedStickerSource>>();
 
 export function loadStickerSource({
@@ -24,7 +26,7 @@ export function loadStickerSource({
 }: {
 	stickerId: string;
 }): Promise<CachedStickerSource> {
-	const cached = stickerSourceCache.get(stickerId);
+	const cached = touchLru({ map: stickerSourceCache, key: stickerId });
 	if (cached) return cached;
 
 	const promise = (async (): Promise<CachedStickerSource> => {
@@ -50,6 +52,12 @@ export function loadStickerSource({
 	})();
 
 	stickerSourceCache.set(stickerId, promise);
+	promise.catch(() => {
+		if (stickerSourceCache.get(stickerId) === promise) {
+			stickerSourceCache.delete(stickerId);
+		}
+	});
+	trimLru({ map: stickerSourceCache, max: MAX_CACHED_STICKERS });
 	return promise;
 }
 

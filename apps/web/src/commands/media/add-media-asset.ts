@@ -8,6 +8,7 @@ import type { FrameRate } from "opencut-wasm";
 import { hasMediaId } from "@/timeline/element-utils";
 import { frameRatesEqual, getHighestImportedVideoFps } from "@/fps/utils";
 import { UpdateProjectSettingsCommand } from "@/commands/project";
+import { videoCache } from "@/services/video-cache/service";
 import { swapRestoredAsset } from "./swap-restored-asset";
 
 export class AddMediaAssetCommand extends Command {
@@ -111,6 +112,8 @@ export class AddMediaAssetCommand extends Command {
 	undo(): void {
 		if (this.savedAssets) {
 			const editor = EditorCore.getInstance();
+			// 檔案會被刪(重做時重寫),解碼器不能繼續綁著舊的 File
+			videoCache.clearVideo({ mediaId: this.assetId });
 			editor.media.setAssets({ assets: this.savedAssets });
 
 			if (this.createdAsset) {

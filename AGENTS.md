@@ -103,6 +103,23 @@
 - 預覽用 `quality: "preview"`,影片以畫布大小解碼;匯出與快照用 `"full"`(原始解析度)。`videoCache` 對不同尺寸各用一個解碼器。
 - 量預覽效能:在 devtools 執行 `window.__renderPerf = true`,每 60 格會輸出一次各階段耗時(`previewFrame`、`resolve`、`buildFrame`、`syncTextures`、`renderFrame`、`sceneRebuild`)與計數(`textureUploadPixels`、`previewBusyTick`…)。
 
+## 預覽順暢度止血(2026-10-31)
+
+依「現況檢視與效能路線圖」第 1 階段。**只讀程式碼推論,未實測**;驗收步驟在 `docs/qa-checklist.md` 3.27。
+
+- **淘汰規則**(`services/cache-policy.ts`,純函式,有測試):`pickEvictions`(依最後使用時間淘汰,忙碌中的與 `keep` 不淘汰)、`touchLru` / `trimLru`(把 Map 當 LRU)、`isWithinPrewarmWindow`。
+- **影片解碼器上限**(`video-cache/service.ts` 的 `MAX_ACTIVE_SINKS`,目前 12):每個解碼器記 `lastUsed` 與 `inflight`(排隊中的請求數);超過上限就淘汰最久沒用且沒有請求的。
+  被淘汰的素材下次用到會重開。`clearVideo` 與淘汰共用 `disposeSink`。數字 12 是估的,實測後再調。
+- **圖片 / 貼圖**(`resolve.ts`):不在時間範圍內就不載入(以前整條時間軸的圖第一格就全部解碼),開始前 1 秒(`PREWARM_LOOKAHEAD`)先在背景載入。
+  `imageSourceCache`(上限 48)與 `stickerSourceCache`(上限 64)改 LRU;載入失敗不再把失敗結果留在快取裡。
+- **預熱**(`videoCache.prewarm`):片段開始前 1 秒先開好解碼器。**不會移動已在使用的解碼器**(同一素材切成很多段時共用一個解碼器,seek 走會讓目前的片段卡住);
+  只有解碼器剛建好、沒有任何畫面時才順便解起點一格。失敗後 5 秒內不再試。
+- **播放中解碼來不及**(`getFrameAt` 的 `maxWaitMs` / `onStale`):預覽播放時最多等 3 格(至少 30 ms),超時先回傳該解碼器目前的那一格、解碼在背景繼續,整格畫面不再被一個慢素材卡住。
+  暫停、拖曳、匯出一律不給 `maxWaitMs`(要精確的那一格)。`CanvasRenderer.usedStaleFrame` 記錄上一次 render 有沒有用到舊的一格,
+  預覽迴圈在**暫停後**會補渲染一次(`needsExactRenderRef`)。解碼器還沒有任何畫面時不走這條,照常等。
+- **復原 / 重做素材**:`AddMediaAssetCommand.undo` 與 `swapRestoredAsset` 會 `videoCache.clearVideo`,避免解碼器還綁著失效的舊 `File`。
+- **還沒做**(路線圖第 2 階段以後):音訊時鐘為主、場景索引取代整棵重建與深度比對、合成器每圖層 2 次全畫面 pass 的快速路徑、解碼搬進 Worker。
+
 ## 音訊匯出(分段處理)
 
 匯出時音訊不再一次混成整段 `AudioBuffer`:
