@@ -177,7 +177,17 @@ async function openEditor({ name, first }) {
 			timeout: 60000,
 		});
 	}
-	if (!marked) throw new Error("找不到預覽畫布");
+	if (!marked) {
+		const diag = await page
+			.evaluate(() => ({
+				url: location.href,
+				text: (document.body.innerText || "").replace(/\s+/g, " ").slice(0, 200),
+				canvases: document.querySelectorAll("canvas").length,
+				hook: !!window.__opencut,
+			}))
+			.catch((error) => ({ error: String(error) }));
+		throw new Error(`找不到預覽畫布 ${JSON.stringify(diag)}`);
+	}
 	return id;
 }
 
@@ -742,6 +752,29 @@ await scenario({
 			name: "I 空白鍵播放 + 選取 + Delete 鍵:要停止、總長 0",
 			ok: before.isPlaying && selected > 0 && !after.isPlaying && after.totalSeconds === 0 && after.timeSeconds === 0,
 			detail: `刪除前 播放中=${before.isPlaying} 播放頭=${before.timeSeconds.toFixed(2)}s 選取=${selected};刪除後取樣 ${samples.join(" ")};${await uiProbe()}`,
+		});
+	},
+});
+
+// ---------------------------------------------------------------------------
+// 情境 J:確認使用者用的「一鍵效能報告」(__opencut.perfReport)能正常產出資料
+// ---------------------------------------------------------------------------
+await scenario({
+	name: "J-perf-report",
+	run: async () => {
+		const videoFiles = readdirSync(fixturesDir).filter((file) => file.startsWith("clip-") && file.endsWith(".webm")).sort();
+		await openEditor({ name: "e2e-perf-report", first: false });
+		const imported = await importFixtures({ names: videoFiles });
+		await evaluate(
+			(args) => window.__opencut.buildFastCut(args),
+			{ assetIds: imported.map((asset) => asset.id), count: 40, clipSeconds: 0.5 },
+		);
+		await evaluate(() => window.__opencut.seek({ seconds: 0 }));
+		const report = await evaluate(() => window.__opencut.perfReport({ seconds: 8 }));
+		record({
+			name: "J 一鍵效能報告可用",
+			ok: report.renderedFrames > 0 && Object.keys(report.spansMeanP95Ms).length > 0,
+			detail: JSON.stringify(report).slice(0, 900),
 		});
 	},
 });

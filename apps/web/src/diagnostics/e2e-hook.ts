@@ -289,6 +289,74 @@ const e2eApi = {
 		return refs.length;
 	},
 
+	/**
+	 * 一鍵效能報告(給使用者在自己的電腦上量真實 GPU 的數字):
+	 * 網址加 `?e2e` 開啟編輯器,載入專案後在 Console 執行 `copy(JSON.stringify(await __opencut.perfReport({ seconds: 10 }), null, 1))`。
+	 * 會從目前位置播放 `seconds` 秒,回傳各階段耗時(平均 / p95,ms)、計數與瀏覽器 / 繪圖資訊,結束後暫停。
+	 */
+	async perfReport({ seconds = 10 }: { seconds?: number } = {}) {
+		const editor = EditorCore.getInstance();
+		const sink: Array<{
+			frames: number;
+			spans: Array<{ span: string; meanMs: number; p95Ms: number }>;
+			counters: Array<{ counter: string; total: number }>;
+		}> = [];
+		(window as unknown as { __renderPerfSink?: unknown[] }).__renderPerfSink = sink;
+		window.__renderPerf = true;
+		const startedAt = performance.now();
+		editor.playback.play();
+		await new Promise((done) => setTimeout(done, seconds * 1000));
+		editor.playback.pause();
+		window.__renderPerf = false;
+		const elapsedSec = (performance.now() - startedAt) / 1000;
+		let frames = 0;
+		const spanMean: Record<string, number> = {};
+		const spanP95: Record<string, number> = {};
+		const counters: Record<string, number> = {};
+		for (const entry of sink) {
+			frames += entry.frames;
+			for (const row of entry.spans) {
+				spanMean[row.span] = Math.max(spanMean[row.span] ?? 0, row.meanMs);
+				spanP95[row.span] = Math.max(spanP95[row.span] ?? 0, row.p95Ms);
+			}
+			for (const row of entry.counters) {
+				counters[row.counter] = (counters[row.counter] ?? 0) + row.total;
+			}
+		}
+		let gpu = "unknown";
+		try {
+			const canvas = document.createElement("canvas");
+			const gl = canvas.getContext("webgl");
+			const info = gl?.getExtension("WEBGL_debug_renderer_info");
+			if (gl && info) gpu = String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL));
+		} catch {}
+		const brokenFlush = sink.length === 0;
+		return {
+			note: brokenFlush
+				? "沒有收到效能資料:播放時間太短(每 60 格才輸出一次),或時間軸是空的"
+				: "span 為各輪最大值的『平均/p95』ms;frames 是這段期間渲染的格數",
+			seconds: Math.round(elapsedSec * 10) / 10,
+			renderedFrames: frames,
+			fpsRendered: Math.round((frames / elapsedSec) * 10) / 10,
+			spansMeanP95Ms: Object.fromEntries(
+				Object.keys(spanMean).map((name) => [
+					name,
+					`${spanMean[name].toFixed(1)}/${(spanP95[name] ?? 0).toFixed(1)}`,
+				]),
+			),
+			counters,
+			gpu,
+			webgpu: typeof navigator !== "undefined" && "gpu" in navigator,
+			userAgent: navigator.userAgent,
+			cores: navigator.hardwareConcurrency,
+			degraded: editor.renderer.isDegraded,
+			clips: editor.scenes
+				.getActiveScene()
+				.tracks.main.elements.length,
+			totalSeconds: mediaTimeToSeconds({ time: editor.timeline.getTotalDuration() }),
+		};
+	},
+
 	seek({ seconds }: { seconds: number }): void {
 		EditorCore.getInstance().playback.seek({
 			time: mediaTimeFromSeconds({ seconds }),
