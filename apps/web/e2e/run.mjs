@@ -258,7 +258,11 @@ function summarizePerf({ sink }) {
 		}
 	}
 	const busy = counters.previewBusyTick ?? 0;
+	const spansMs = Object.fromEntries(
+		Object.keys(spanMean).map((name) => [name, `${spanMean[name].toFixed(1)}/${(spanP95[name] ?? 0).toFixed(1)}`]),
+	);
 	return {
+		spansMeanP95Ms: spansMs,
 		renderedFrames: frames,
 		previewBusyTicks: busy,
 		busyRatio: frames + busy > 0 ? +(busy / (frames + busy)).toFixed(3) : 0,
@@ -422,7 +426,7 @@ await scenario({
 		record({
 			name: "B 效能摘要(僅記錄,軟體繪圖)",
 			ok: true,
-			detail: `busyRatio=${perf.busyRatio} previewFrame p95=${perf.previewFrameP95Ms}ms 貼圖上傳=${perf.counters.textureUpload ?? 0}`,
+			detail: `busyRatio=${perf.busyRatio} previewFrame p95=${perf.previewFrameP95Ms}ms 貼圖上傳=${perf.counters.textureUpload ?? 0};各階段 平均/p95 ms=${JSON.stringify(perf.spansMeanP95Ms)}`,
 			metrics: perf,
 		});
 	},
