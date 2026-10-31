@@ -152,11 +152,21 @@ async function openEditor({ name, first }) {
 		timeout: 90000,
 	});
 	if (!ready) throw new Error("專案沒有載入完成");
-	const marked = await waitFor({
+	let marked = await waitFor({
 		label: "預覽畫布出現",
 		fn: () => window.__opencut.markPreviewCanvas(),
 		timeout: 60000,
 	});
+	if (!marked) {
+		// 冷啟動偶爾卡住(CI 上觀察到一次,重跑就過):重新載入頁面再試一次
+		console.log("  預覽畫布沒出現,重新載入再試一次");
+		await page.reload({ waitUntil: "load" });
+		marked = await waitFor({
+			label: "預覽畫布出現(重試)",
+			fn: () => !!window.__opencut && window.__opencut.markPreviewCanvas(),
+			timeout: 60000,
+		});
+	}
 	if (!marked) throw new Error("找不到預覽畫布");
 	return id;
 }
