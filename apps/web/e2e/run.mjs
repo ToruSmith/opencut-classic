@@ -744,8 +744,24 @@ writeFileSync(join(outDir, "summary.md"), lines.join("\n"));
 if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`);
 
 console.log(`\n通過 ${results.length - failed.length} / ${results.length}`);
-// annotations 讀得到(日誌下載會被擋),把全部結果壓成一則 notice
-console.log(`::notice title=e2e-summary::${results.map((r) => `${r.ok ? "PASS" : "FAIL"} ${r.name} — ${r.detail}`).join("%0A")}`);
+// annotations 讀得到(日誌下載會被擋)。單則太長會被截斷,所以每約 2500 字拆成一則(e2e-summary-1、-2…)
+const summaryLines = results.map((r) => `${r.ok ? "PASS" : "FAIL"} ${r.name} — ${r.detail}`);
+let chunk = [];
+let chunkLen = 0;
+let chunkIndex = 1;
+const flushChunk = () => {
+	if (chunk.length === 0) return;
+	console.log(`::notice title=e2e-summary-${chunkIndex}::${chunk.join("%0A")}`);
+	chunkIndex += 1;
+	chunk = [];
+	chunkLen = 0;
+};
+for (const line of summaryLines) {
+	if (chunkLen + line.length > 2500) flushChunk();
+	chunk.push(line);
+	chunkLen += line.length;
+}
+flushChunk();
 const perfRows = results.filter((r) => r.metrics).map((r) => `${r.name}: ${JSON.stringify(r.metrics)}`);
 if (perfRows.length > 0) console.log(`::notice title=e2e-perf::${perfRows.join("%0A")}`);
 process.exit(failed.length === 0 ? 0 : 1);
