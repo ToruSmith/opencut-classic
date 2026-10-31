@@ -736,6 +736,71 @@ await scenario({
 });
 
 // ---------------------------------------------------------------------------
+// 情境 M:從素材庫刪素材(連帶移除片段)→ 復原 → 重做 → 再復原
+// 曾經的缺陷:復原後解碼器仍綁著失效的舊 File(黑畫面 / NotReadableError)。
+// 每次復原後,素材與片段要回來、第 2 秒要是原本的顏色、播放要前進
+// ---------------------------------------------------------------------------
+await scenario({
+	name: "M-undo-redo-asset",
+	run: async () => {
+		const videoFiles = readdirSync(fixturesDir).filter((file) => file.startsWith("clip-") && file.endsWith(".webm")).sort();
+		await openEditor({ name: "e2e-undo-redo", first: false });
+		const imported = await importFixtures({ names: videoFiles.slice(0, 1) });
+		const ids = imported.map((asset) => asset.id);
+		await evaluate((assetIds) => window.__opencut.buildSequential({ assetIds }), ids);
+		await evaluate(() => window.__opencut.seek({ seconds: 2 }));
+		const before = await waitForColor({ candidates: [CLIP_COLORS.red] });
+		record({ name: "M0 刪除前第 2 秒是紅", ok: before.ok, detail: `實際 rgb(${before.color})` });
+
+		await evaluate((assetIds) => window.__opencut.removeAssets({ ids: assetIds }), ids);
+		await sleep(1500);
+		const removed = await evaluate(() => window.__opencut.state());
+		record({
+			name: "M1 刪素材後:素材 0、總長 0",
+			ok: removed.assetCount === 0 && removed.totalSeconds === 0,
+			detail: `素材=${removed.assetCount} 總長=${removed.totalSeconds}s`,
+		});
+
+		for (const round of [1, 2]) {
+			await evaluate(() => window.__opencut.undo());
+			const restored = await waitFor({
+				label: `復原 ${round}`,
+				fn: () => window.__opencut.state().assetCount === 1 && window.__opencut.state().totalSeconds > 5,
+				timeout: 15000,
+			});
+			await evaluate(() => window.__opencut.seek({ seconds: 2 }));
+			const color = await waitForColor({ candidates: [CLIP_COLORS.red], timeout: 15000 });
+			const st = await evaluate(() => window.__opencut.state());
+			record({
+				name: `M${round * 2} 復原(第 ${round} 次):素材與片段回來、畫面是紅`,
+				ok: restored && color.ok,
+				detail: `素材=${st.assetCount} 總長=${st.totalSeconds.toFixed(2)}s 顏色 rgb(${color.color}) 等了 ${color.waitedMs}ms`,
+			});
+			await evaluate(() => window.__opencut.seek({ seconds: 1 }));
+			await evaluate(() => window.__opencut.play());
+			await sleep(1500);
+			const playing = await evaluate(() => window.__opencut.state());
+			await evaluate(() => window.__opencut.pause());
+			record({
+				name: `M${round * 2 + 1} 復原後播放有前進(第 ${round} 次)`,
+				ok: playing.timeSeconds > 1.8,
+				detail: `播放頭=${playing.timeSeconds.toFixed(2)}s`,
+			});
+			if (round === 1) {
+				await evaluate(() => window.__opencut.redo());
+				await sleep(1500);
+				const redone = await evaluate(() => window.__opencut.state());
+				record({
+					name: "M-redo 重做刪除:素材 0、總長 0",
+					ok: redone.assetCount === 0 && redone.totalSeconds === 0,
+					detail: `素材=${redone.assetCount} 總長=${redone.totalSeconds}s`,
+				});
+			}
+		}
+	},
+});
+
+// ---------------------------------------------------------------------------
 // 情境 G:從素材庫刪掉正在用的素材(會連帶移除片段),播放與播放頭同樣必須停 / 縮回
 // ---------------------------------------------------------------------------
 await scenario({

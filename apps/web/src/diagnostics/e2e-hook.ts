@@ -371,6 +371,14 @@ const e2eApi = {
 		}
 	},
 
+	/** 復原 / 重做(走和快捷鍵相同的指令歷史) */
+	undo(): void {
+		EditorCore.getInstance().command.undo();
+	},
+	redo(): void {
+		EditorCore.getInstance().command.redo();
+	},
+
 	/** 只刪有實際內容的片段(影片、圖片、音訊…),特效片段留著——重現「影片拿掉、特效殘留」 */
 	deleteContentClips(): number {
 		const editor = EditorCore.getInstance();
