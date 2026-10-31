@@ -11,6 +11,7 @@ import { EditorCore } from "@/core";
 import { processMediaAssets } from "@/media/processing";
 import { buildEffectElement, buildElementFromMedia } from "@/timeline/element-utils";
 import type { MediaAsset } from "@/media/types";
+import type { TimelineElement } from "@/timeline";
 import { getImageCacheSize } from "@/services/renderer/nodes/image-node";
 import { wasmCompositor } from "@/services/renderer/compositor/wasm-compositor";
 import { MAX_ACTIVE_SINKS, videoCache } from "@/services/video-cache/service";
@@ -424,7 +425,7 @@ const e2eApi = {
 	getVolumes(): number[] {
 		const scene = EditorCore.getInstance().scenes.getActiveScene().tracks;
 		return [...scene.overlay, scene.main, ...scene.audio]
-			.flatMap((track) => track.elements)
+			.flatMap((track): TimelineElement[] => track.elements as TimelineElement[])
 			.filter((element) => element.type === "video" || element.type === "audio")
 			.sort((a, b) => a.startTime - b.startTime)
 			.map((element) => {
