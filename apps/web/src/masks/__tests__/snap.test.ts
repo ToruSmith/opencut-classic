@@ -357,7 +357,14 @@ describe("mask snapping", () => {
 		});
 
 		expect(result.params.scale).toBe(2.5);
-		expect(result.activeLines).toEqual([{ type: "vertical", position: 100 }]);
+		// 置中的遮罩放大到 2.5 倍時,左右兩邊都剛好貼齊畫布,所以兩側都要有輔助線
+		expect(result.activeLines).toHaveLength(2);
+		expect(result.activeLines).toEqual(
+			expect.arrayContaining([
+				{ type: "vertical", position: 100 },
+				{ type: "vertical", position: -100 },
+			]),
+		);
 	});
 
 	test("snaps text mask movement using intrinsic text bounds", () => {
@@ -495,15 +502,14 @@ describe("custom mask point insertion", () => {
 		});
 
 		expect(nextPoints.map((point) => point.id)).toEqual(["a", "new", "b", "c"]);
-		expect(nextPoints[1]).toMatchObject({
-			id: "new",
-			x: 0,
-			y: -0.1,
-			inX: 0,
-			inY: 0,
-			outX: 0,
-			outY: 0,
-		});
+		// de Casteljau 切割:新點的把手沿著原線段,各為線段長的 1/4(0.4 / 4 = 0.1),形狀不變
+		expect(nextPoints[1].id).toBe("new");
+		expect(nextPoints[1].x).toBeCloseTo(0, 6);
+		expect(nextPoints[1].y).toBeCloseTo(-0.1, 6);
+		expect(nextPoints[1].inX).toBeCloseTo(-0.1, 6);
+		expect(nextPoints[1].inY).toBeCloseTo(0, 6);
+		expect(nextPoints[1].outX).toBeCloseTo(0.1, 6);
+		expect(nextPoints[1].outY).toBeCloseTo(0, 6);
 	});
 
 	test("builds updated custom mask params for a clicked segment", () => {

@@ -73,7 +73,7 @@
 - **節拍面板拆成「分析」與「剪輯」兩個分頁**:現在內容很長(已加捲動),使用者可能會想拆。
 - **節拍偵測在真實音樂上的準確度還沒驗證**(只用合成節拍測過):節奏不穩 / 變速 / 純人聲的歌可能不準;若使用者回報偏差,從 `beat-detect.ts` 的門檻與 BPM 先驗(偏好 120)下手。
 - 沒有刪除 LUT 的介面(沒用到的也留在專案裡,約 140 KB/個)。
-- 已知失敗的 3 個遮罩測試(見「已知問題」)還沒人判斷是測試過時還是程式要改。
+- 已知失敗的遮罩測試只剩 1 個(文字遮罩吸附,需要 canvas 量測、bun 沒有 DOM)。
 
 ### 給接手者的提醒(踩過的坑)
 
@@ -164,7 +164,7 @@
 
 - **單元測試有「棘輪」**:CI 的測試步驟(`.github/scripts/test-ratchet.sh`)會把失敗的測試與 `.github/known-failing-tests.txt` 比對——清單以外的新失敗會讓 CI 失敗(Deploy 不會發佈);已修好的會提醒你從清單刪掉。整個測試檔載入失敗(bun 只印 `Unhandled error`、沒有 `(fail)`)也算失敗。
 - `apps/web/test-setup.ts`(由 `bunfig.toml` 預載)用真正的 WASM 初始化 `opencut-wasm`。bun 不支援 wasm-pack bundler 目標的 ESM 匯入 .wasm,沒有這一步,依賴 WASM 的 `const`(像 `ZERO_MEDIA_TIME`)會在模組載入到一半時丟錯。本機沒有 node_modules 時這個預載會失敗並印警告,測試仍會跑,只是依賴 WASM 的會失敗。
-- 目前已知失敗 3 個(都在遮罩,原因寫在 `known-failing-tests.txt`),需要有人判斷是測試過時還是程式要改。
+- 目前已知失敗 1 個(文字遮罩吸附,原因寫在 `known-failing-tests.txt`);另兩個已判斷為測試期望過時並改正。
 - ~~刪除素材後「復原」救不回素材~~(已修):OPFS 的 `File` 在檔案被刪**或被改寫**後就失效(Chromium 實測:刪除 → `NotFoundError`,
   改寫 → `NotReadableError`;只有重新 `getFile()` 的新 `File` 能讀)。現在可以復原的刪除只移除素材記錄、檔案先留著
   (`deleteMediaAsset({ keepFile: true })`),復原 / 重做用 `restoreMediaAsset`:檔案還在就只補回記錄並**重新讀一份新的 File**
