@@ -808,7 +808,13 @@ await scenario({
 	name: "N-beat-analysis",
 	run: async () => {
 		await openEditor({ name: "e2e-beats", first: false });
-		const imported = await importFixtures({ names: ["beat-120.webm"] });
+		// 專案剛載入時素材清單偶爾會被晚到的載入覆蓋(上一輪 N 因此找不到素材),匯入後確認素材真的在,不在就重匯一次
+		let imported = await importFixtures({ names: ["beat-120.webm"] });
+		await sleep(1500);
+		if ((await evaluate(() => window.__opencut.state().assetCount)) < 1) {
+			console.log("  N:匯入後素材不在清單,重匯一次");
+			imported = await importFixtures({ names: ["beat-120.webm"] });
+		}
 		await evaluate((assetIds) => window.__opencut.buildSequential({ assetIds }), imported.map((asset) => asset.id));
 		const grid = await evaluate(() => window.__opencut.analyzeBeats({ mode: "grid" }));
 		record({
