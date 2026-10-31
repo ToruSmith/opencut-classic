@@ -1015,6 +1015,154 @@ await scenario({
 });
 
 // ---------------------------------------------------------------------------
+// 情境 P:組合片段(建立組合)
+// 4 支 6 秒純色(紅綠藍黃)首尾相接 = 24 秒。把中間的綠、藍包成組合片段(6–18 秒):
+// 建立前後每個時間點的畫面都要一樣(經過展開後渲染)、總長不變、能跨過組合邊界播放;
+// 進入組合後總長是組合內容(12 秒)、匯出仍是整個專案(不是組合內容);
+// 復原 / 重做(包含「人在組合裡面按復原」)與解除組合後畫面也要一樣
+// ---------------------------------------------------------------------------
+await scenario({
+	name: "P-compound",
+	run: async () => {
+		const videoFiles = readdirSync(fixturesDir).filter((file) => file.startsWith("clip-") && file.endsWith(".webm")).sort();
+		await openEditor({ name: "e2e-compound", first: false });
+		const imported = await importFixtures({ names: videoFiles });
+		await evaluate((assetIds) => window.__opencut.buildSequential({ assetIds }), imported.map((asset) => asset.id));
+
+		const ALL_POINTS = [[3, "red"], [9, "green"], [15, "blue"], [21, "yellow"]];
+		const checkPicture = async ({ name, points = ALL_POINTS }) => {
+			const bad = [];
+			for (const [sec, color] of points) {
+				await evaluate((seconds) => window.__opencut.seek({ seconds }), sec);
+				const result = await waitForColor({ candidates: [CLIP_COLORS[color]], timeout: 15000 });
+				if (!result.ok) bad.push(`${sec}s 應為 ${color},實際 rgb(${result.color})`);
+			}
+			record({ name, ok: bad.length === 0, detail: bad.join("; ") || points.map(([sec, color]) => `${sec}s=${color}`).join(" ") });
+		};
+		const info = () => evaluate(() => window.__opencut.compoundInfo());
+		const sameTypes = (a, b) => a.length === b.length && a.every((type, index) => type === b[index]);
+		const PLAIN = ["video", "video", "video", "video"];
+		const GROUPED = ["video", "compound", "video"];
+
+		await checkPicture({ name: "P0 建立前:四段顏色正確" });
+
+		const created = await evaluate(() => window.__opencut.compoundCreate({ from: 1, to: 2 }));
+		const afterCreate = await info();
+		record({
+			name: "P1 建立組合:成功、多一個場景、主軌變成 影片/組合/影片、總長不變",
+			ok: created.ok === true && afterCreate.sceneCount === 2 && sameTypes(afterCreate.mainTypes, GROUPED) && Math.abs(afterCreate.totalSeconds - 24) < 0.2 && afterCreate.activeKind === "normal",
+			detail: JSON.stringify({ created, ...afterCreate }),
+		});
+		await checkPicture({ name: "P2 建立後:每個時間點的畫面與建立前相同" });
+
+		// 從組合外的紅色一路播進組合(跨過 6 秒的邊界)
+		await evaluate(() => window.__opencut.seek({ seconds: 5 }));
+		await evaluate(() => window.__opencut.play());
+		await sleep(3000);
+		const playing = await evaluate(() => window.__opencut.state());
+		await evaluate(() => window.__opencut.pause());
+		record({
+			name: "P3 從組合外播進組合:播放頭前進超過邊界",
+			ok: playing.timeSeconds > 7,
+			detail: `播放頭=${playing.timeSeconds.toFixed(2)}s`,
+		});
+
+		// 進入組合:場景變成組合內容(12 秒),3 秒 = 外面的 9 秒(綠),9 秒 = 外面的 15 秒(藍)
+		const entered = await evaluate(() => window.__opencut.compoundEnter());
+		const inside = await info();
+		record({
+			name: "P4 進入組合:目前場景是組合、總長約 12 秒、有返回路徑",
+			ok: entered.ok === true && inside.activeKind === "compound" && Math.abs(inside.totalSeconds - 12) < 0.2 && inside.breadcrumb.length >= 2,
+			detail: JSON.stringify({ entered, ...inside }),
+		});
+		await checkPicture({ name: "P5 組合裡面:3 秒是綠、9 秒是藍", points: [[3, "green"], [9, "blue"]] });
+
+		// 人在組合裡面匯出:應該匯出整個專案(範圍 4–14 秒 = 10 秒),不是只匯出組合內容(12 秒,範圍會無效)
+		const exported = await evaluate(() =>
+			window.__opencut.exportRange({ startSeconds: 4, endSeconds: 14, probeSeconds: [1, 3, 7, 9] }),
+		);
+		record({
+			name: "P6 在組合裡面匯出:仍是整個專案(長度約 10 秒)",
+			ok: exported.ok && Math.abs(exported.duration - 10) < 0.4 && exported.hasVideo,
+			detail: JSON.stringify(exported),
+		});
+		record({
+			name: "P7 匯出畫面經過展開:5 秒紅、7 秒綠、11 秒綠、13 秒藍",
+			ok:
+				exported.ok &&
+				exported.colors?.length === 4 &&
+				isNear(exported.colors[0].rgb, [255, 0, 0]) &&
+				isNear(exported.colors[1].rgb, [0, 128, 0]) &&
+				isNear(exported.colors[2].rgb, [0, 128, 0]) &&
+				isNear(exported.colors[3].rgb, [0, 0, 255]),
+			detail: JSON.stringify(exported.colors),
+		});
+
+		await evaluate(() => window.__opencut.compoundExit());
+		const outside = await info();
+		record({
+			name: "P8 離開組合:回到原本的場景、總長 24 秒",
+			ok: outside.activeKind === "normal" && sameTypes(outside.mainTypes, GROUPED) && Math.abs(outside.totalSeconds - 24) < 0.2,
+			detail: JSON.stringify(outside),
+		});
+		await checkPicture({ name: "P9 離開後畫面仍正確" });
+
+		// 復原 / 重做
+		await evaluate(() => window.__opencut.undo());
+		const undone = await info();
+		record({
+			name: "P10 復原建立:場景回到 1 個、主軌回到四個影片",
+			ok: undone.sceneCount === 1 && sameTypes(undone.mainTypes, PLAIN) && Math.abs(undone.totalSeconds - 24) < 0.2,
+			detail: JSON.stringify(undone),
+		});
+		await checkPicture({ name: "P11 復原後畫面正確" });
+		await evaluate(() => window.__opencut.redo());
+		const redone = await info();
+		record({
+			name: "P12 重做建立:組合回來",
+			ok: redone.sceneCount === 2 && sameTypes(redone.mainTypes, GROUPED),
+			detail: JSON.stringify(redone),
+		});
+		await checkPicture({ name: "P13 重做後畫面正確" });
+
+		// 人在組合裡面按復原:歷史紀錄要先切回當初的場景再復原
+		await evaluate(() => window.__opencut.compoundEnter());
+		await evaluate(() => window.__opencut.undo());
+		const undoneInside = await info();
+		record({
+			name: "P14 在組合裡面按復原:切回原場景並復原(不會寫錯場景)",
+			ok: undoneInside.activeKind === "normal" && undoneInside.sceneCount === 1 && sameTypes(undoneInside.mainTypes, PLAIN),
+			detail: JSON.stringify(undoneInside),
+		});
+		await evaluate(() => window.__opencut.redo());
+		const redoneAgain = await info();
+		record({
+			name: "P15 再重做:組合回來、仍在原場景",
+			ok: redoneAgain.activeKind === "normal" && redoneAgain.sceneCount === 2 && sameTypes(redoneAgain.mainTypes, GROUPED),
+			detail: JSON.stringify(redoneAgain),
+		});
+
+		// 解除組合
+		const ungrouped = await evaluate(() => window.__opencut.compoundUngroup());
+		const afterUngroup = await info();
+		record({
+			name: "P16 解除組合:主軌回到四個影片、總長 24 秒",
+			ok: ungrouped.ok === true && sameTypes(afterUngroup.mainTypes, PLAIN) && Math.abs(afterUngroup.totalSeconds - 24) < 0.2,
+			detail: JSON.stringify({ ungrouped, ...afterUngroup }),
+		});
+		await checkPicture({ name: "P17 解除後畫面與一開始相同" });
+		await evaluate(() => window.__opencut.undo());
+		const regrouped = await info();
+		record({
+			name: "P18 復原解除:組合回來",
+			ok: sameTypes(regrouped.mainTypes, GROUPED),
+			detail: JSON.stringify(regrouped),
+		});
+		await checkPicture({ name: "P19 復原解除後畫面正確" });
+	},
+});
+
+// ---------------------------------------------------------------------------
 // 總結
 // ---------------------------------------------------------------------------
 record({

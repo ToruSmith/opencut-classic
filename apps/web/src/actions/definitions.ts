@@ -134,6 +134,23 @@ export const ACTIONS = {
 		description: "擷取或還原原始音訊",
 		category: "editing",
 	},
+	"create-compound": {
+		description: "將選取內容建立為組合片段",
+		category: "editing",
+	},
+	"ungroup-compound": {
+		description: "解除組合片段",
+		category: "editing",
+	},
+	"enter-compound": {
+		description: "開啟組合片段",
+		category: "timeline",
+		args: { trackId: "string", elementId: "string" },
+	},
+	"exit-compound": {
+		description: "關閉組合片段",
+		category: "timeline",
+	},
 	"select-all": {
 		description: "全選",
 		category: "selection",

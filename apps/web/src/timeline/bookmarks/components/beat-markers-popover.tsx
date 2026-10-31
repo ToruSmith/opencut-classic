@@ -66,7 +66,7 @@ export function BeatMarkersPopover({
 		try {
 			const { analyzeTimelineBeats } = await import("@/media/beat-analysis");
 			const result = await analyzeTimelineBeats({
-				tracks: editor.scenes.getActiveScene().tracks,
+				tracks: editor.scenes.getPlaybackTracks(),
 				mediaAssets: editor.media.getAssets(),
 				totalDuration,
 				mode,
@@ -215,7 +215,8 @@ export function BeatMarkersPopover({
 		}
 		// 排滿的範圍 = 音訊軌上最後一個片段的結尾(音樂有多長就排多長)
 		let end = 0;
-		for (const track of scene.tracks.audio) {
+		// 組合片段裡的音樂也算(用展開後的軌道)
+		for (const track of editor.scenes.getPlaybackTracks({ tracks: scene.tracks }).audio) {
 			for (const element of track.elements) {
 				end = Math.max(end, element.startTime + element.duration);
 			}

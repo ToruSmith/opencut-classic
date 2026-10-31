@@ -8,6 +8,12 @@ interface CommandHistoryEntry {
 	command: Command;
 	previousSelection: EditorSelectionSnapshot;
 	selectionOverride?: EditorSelectionSnapshot;
+	/**
+	 * Scene that was active when the command ran. Most commands undo by writing
+	 * saved tracks into the active scene, so undo/redo must run in that scene
+	 * even if the user has since switched (e.g. opened a compound clip).
+	 */
+	sceneId: string | null;
 }
 
 export class CommandManager {
@@ -19,10 +25,12 @@ export class CommandManager {
 	constructor(private editor: EditorCore) {}
 
 	execute({ command }: { command: Command }): Command {
-		const beforeTracks = this.isRippleEnabled
-			? (this.editor.scenes.getActiveSceneOrNull()?.tracks ?? null)
-			: null;
+		const beforeTracks =
+			this.isRippleEnabled && !command.suppressesRipple
+				? (this.editor.scenes.getActiveSceneOrNull()?.tracks ?? null)
+				: null;
 		const previousSelection = this.getSelectionSnapshot();
+		const sceneId = this.getActiveSceneId();
 		const result = command.execute();
 		this.applyRippleIfEnabled({ beforeTracks });
 		const selectionOverride = this.applySelectionOverride(result);
@@ -31,6 +39,7 @@ export class CommandManager {
 			command,
 			previousSelection,
 			selectionOverride,
+			sceneId,
 		});
 		this.redoStack = [];
 		return command;
@@ -40,6 +49,7 @@ export class CommandManager {
 		this.history.push({
 			command,
 			previousSelection: this.getSelectionSnapshot(),
+			sceneId: this.getActiveSceneId(),
 		});
 		this.redoStack = [];
 	}
@@ -51,6 +61,9 @@ export class CommandManager {
 	undo(): void {
 		if (this.history.length === 0) return;
 		const entry = this.history.pop();
+		if (entry && !this.activateEntryScene({ entry })) {
+			return;
+		}
 		entry?.command.undo();
 		if (entry) {
 			// Only restore selection for commands that explicitly changed it.
@@ -73,10 +86,14 @@ export class CommandManager {
 		if (!entry) {
 			return;
 		}
+		if (!this.activateEntryScene({ entry })) {
+			return;
+		}
 
-		const beforeTracks = this.isRippleEnabled
-			? (this.editor.scenes.getActiveSceneOrNull()?.tracks ?? null)
-			: null;
+		const beforeTracks =
+			this.isRippleEnabled && !entry.command.suppressesRipple
+				? (this.editor.scenes.getActiveSceneOrNull()?.tracks ?? null)
+				: null;
 		const previousSelection = this.getSelectionSnapshot();
 		const result = entry.command.redo();
 		this.applyRippleIfEnabled({ beforeTracks });
@@ -87,7 +104,39 @@ export class CommandManager {
 			command: entry.command,
 			previousSelection,
 			selectionOverride,
+			sceneId: entry.sceneId,
 		});
+	}
+
+	private getActiveSceneId(): string | null {
+		return this.editor.scenes.getActiveSceneOrNull()?.id ?? null;
+	}
+
+	/**
+	 * Switch to the scene a history entry belongs to. Returns false (and drops
+	 * the entry) when that scene no longer exists, because undoing it would
+	 * write its saved tracks into the wrong scene.
+	 */
+	private activateEntryScene({
+		entry,
+	}: {
+		entry: CommandHistoryEntry;
+	}): boolean {
+		if (!entry.sceneId || entry.sceneId === this.getActiveSceneId()) {
+			return true;
+		}
+		const exists = this.editor.scenes
+			.getScenes()
+			.some((scene) => scene.id === entry.sceneId);
+		if (!exists) {
+			console.warn(
+				"[commands] Dropped a history entry whose scene no longer exists.",
+			);
+			return false;
+		}
+		// switchToScene has no awaits, so the switch is complete on return.
+		void this.editor.scenes.switchToScene({ sceneId: entry.sceneId });
+		return true;
 	}
 
 	canUndo(): boolean {

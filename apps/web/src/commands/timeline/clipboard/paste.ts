@@ -4,7 +4,8 @@ import {
 	type CommandResult,
 } from "@/commands/base-command";
 import { EditorCore } from "@/core";
-import type { SceneTracks, TimelineElement } from "@/timeline";
+import type { SceneTracks, TimelineElement, TScene } from "@/timeline";
+import { wouldCreateCompoundCycle } from "@/timeline/compound/graph";
 import type { ElementClipboardItem } from "@/clipboard";
 import { generateUUID } from "@/utils/id";
 import {
@@ -46,17 +47,31 @@ export class PasteCommand extends Command {
 		this.savedState = editor.scenes.getActiveScene().tracks;
 		this.pastedElements = [];
 
-		const minStart = this.clipboardItems.reduce(
+		// A pasted compound clip must point at a scene that exists here and must
+		// not make the current scene contain itself.
+		const clipboardItems = filterPasteableCompoundItems({
+			clipboardItems: this.clipboardItems,
+			scenes: editor.scenes.getScenes(),
+			hostSceneId: editor.scenes.getActiveScene().id,
+		});
+		if (clipboardItems.length < this.clipboardItems.length) {
+			console.warn(
+				"[paste] Skipped compound clips whose contents are missing or that would contain themselves.",
+			);
+		}
+		if (clipboardItems.length === 0) return undefined;
+
+		const minStart = clipboardItems.reduce(
 			(earliestStartTime, item) =>
 				item.element.startTime < earliestStartTime
 					? item.element.startTime
 					: earliestStartTime,
-			this.clipboardItems[0].element.startTime,
+			clipboardItems[0].element.startTime,
 		);
 
 		let updatedTracks = this.savedState;
 		const itemsByTrackId = groupClipboardItemsByTrackId({
-			clipboardItems: this.clipboardItems,
+			clipboardItems,
 		});
 
 		for (const [trackId, items] of itemsByTrackId) {
@@ -162,6 +177,28 @@ export class PasteCommand extends Command {
 	getPastedElements(): { trackId: string; elementId: string }[] {
 		return this.pastedElements;
 	}
+}
+
+export function filterPasteableCompoundItems({
+	clipboardItems,
+	scenes,
+	hostSceneId,
+}: {
+	clipboardItems: ElementClipboardItem[];
+	scenes: TScene[];
+	hostSceneId: string;
+}): ElementClipboardItem[] {
+	const sceneIds = new Set(scenes.map((scene) => scene.id));
+	return clipboardItems.filter((item) => {
+		const element = item.element;
+		if (element.type !== "compound") return true;
+		if (!sceneIds.has(element.sceneId)) return false;
+		return !wouldCreateCompoundCycle({
+			scenes,
+			hostSceneId,
+			referencedSceneId: element.sceneId,
+		});
+	});
 }
 
 function groupClipboardItemsByTrackId({

@@ -69,7 +69,7 @@ export function ScenesView({ children }: { children: React.ReactNode }) {
 				continue;
 			}
 
-			const { canDelete, reason } = canDeleteScene({ scene });
+			const { canDelete, reason } = canDeleteScene({ scene, scenes });
 			if (!canDelete) {
 				toast.error(reason || "Failed to delete scene");
 				continue;
@@ -157,6 +157,11 @@ export function ScenesView({ children }: { children: React.ReactNode }) {
 								>
 									<span>{scene.name}</span>
 									<div className="flex items-center gap-2">
+										{scene.kind === "compound" && (
+											<span className="text-muted-foreground text-xs">
+												組合片段
+											</span>
+										)}
 										{((isSelectMode && selectedScenes.has(scene.id)) ||
 											(!isSelectMode && currentScene?.id === scene.id)) && (
 											<Check className="size-4" />
