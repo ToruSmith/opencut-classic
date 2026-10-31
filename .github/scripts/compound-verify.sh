@@ -18,7 +18,7 @@ run_checks() {
 		timeout 900 bunx tsc --noEmit -p tsconfig.json > "$OUT/tsc-$label.log" 2>&1
 		echo $? > "$OUT/tsc-$label.code"
 
-		timeout 900 bun test > "$OUT/test-$label.log" 2>&1
+		timeout 900 bun test --preload "$ROOT/.github/scripts/wasm-preload.ts" > "$OUT/test-$label.log" 2>&1
 		echo $? > "$OUT/test-$label.code"
 
 		# Lint only the files this branch touches, on both sides.
@@ -40,7 +40,7 @@ run_checks() {
 		fi
 		# Full output of the compound tests alone, for diagnosis.
 		[ -f src/timeline/compound/__tests__/compound.test.ts ] && \
-			timeout 300 bun test src/timeline/compound > "$OUT/compound-$label.log" 2>&1
+			timeout 300 bun test --preload "$ROOT/.github/scripts/wasm-preload.ts" src/timeline/compound > "$OUT/compound-$label.log" 2>&1
 	)
 }
 
