@@ -197,7 +197,7 @@ async function sampleCenterColor() {
 
 const CLIP_COLORS = {
 	red: [255, 0, 0],
-	green: [0, 255, 0],
+	green: [0, 128, 0], // ffmpeg 的 green 是 CSS 綠(0,128,0),不是 lime
 	blue: [0, 0, 255],
 	yellow: [255, 255, 0],
 };
@@ -456,4 +456,8 @@ writeFileSync(join(outDir, "summary.md"), lines.join("\n"));
 if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`);
 
 console.log(`\n通過 ${results.length - failed.length} / ${results.length}`);
+// annotations 讀得到(日誌下載會被擋),把全部結果壓成一則 notice
+console.log(`::notice title=e2e-summary::${results.map((r) => `${r.ok ? "PASS" : "FAIL"} ${r.name} — ${r.detail}`).join("%0A")}`);
+const perfRows = results.filter((r) => r.metrics).map((r) => `${r.name}: ${JSON.stringify(r.metrics)}`);
+if (perfRows.length > 0) console.log(`::notice title=e2e-perf::${perfRows.join("%0A")}`);
 process.exit(failed.length === 0 ? 0 : 1);
