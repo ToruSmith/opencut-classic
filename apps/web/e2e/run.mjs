@@ -801,6 +801,33 @@ await scenario({
 });
 
 // ---------------------------------------------------------------------------
+// 情境 N:節拍分析整條路徑(解碼 → 混音串流 → 偵測)。素材是 120 BPM、每 0.5 秒一下短音,共 12 秒
+// 只驗合成節拍(真實音樂的準確度仍待實機)
+// ---------------------------------------------------------------------------
+await scenario({
+	name: "N-beat-analysis",
+	run: async () => {
+		await openEditor({ name: "e2e-beats", first: false });
+		const imported = await importFixtures({ names: ["beat-120.webm"] });
+		await evaluate((assetIds) => window.__opencut.buildSequential({ assetIds }), imported.map((asset) => asset.id));
+		const grid = await evaluate(() => window.__opencut.analyzeBeats({ mode: "grid" }));
+		record({
+			name: "N1 節拍格模式:BPM 約 120",
+			ok: Boolean(grid) && grid.bpm !== null && Math.abs(grid.bpm - 120) < 3,
+			detail: JSON.stringify({ bpm: grid?.bpm, count: grid?.times.length, first: grid?.times.slice(0, 4) }),
+		});
+		const onsets = await evaluate(() => window.__opencut.analyzeBeats({ mode: "onsets" }));
+		const gaps = onsets ? onsets.times.slice(1).map((t, i) => t - onsets.times[i]) : [];
+		const medianGap = gaps.length ? [...gaps].sort((a, b) => a - b)[gaps.length >> 1] : 0;
+		record({
+			name: "N2 重音模式:約 24 個、間隔約 0.5 秒",
+			ok: Boolean(onsets) && onsets.times.length >= 20 && onsets.times.length <= 28 && Math.abs(medianGap - 0.5) < 0.05,
+			detail: JSON.stringify({ count: onsets?.times.length, medianGap, first: onsets?.times.slice(0, 4) }),
+		});
+	},
+});
+
+// ---------------------------------------------------------------------------
 // 情境 G:從素材庫刪掉正在用的素材(會連帶移除片段),播放與播放頭同樣必須停 / 縮回
 // ---------------------------------------------------------------------------
 await scenario({

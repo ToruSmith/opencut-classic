@@ -371,6 +371,27 @@ const e2eApi = {
 		}
 	},
 
+	/** 對目前時間軸的混音跑節拍分析(和節拍面板同一條路徑),回傳 BPM 與標記時間(秒) */
+	async analyzeBeats({
+		mode,
+		sensitivity = 0.5,
+	}: {
+		mode: "grid" | "onsets";
+		sensitivity?: number;
+	}) {
+		const editor = EditorCore.getInstance();
+		const { analyzeTimelineBeats } = await import("@/media/beat-analysis");
+		const result = await analyzeTimelineBeats({
+			tracks: editor.scenes.getActiveScene().tracks,
+			mediaAssets: editor.media.getAssets(),
+			totalDuration: editor.timeline.getTotalDuration(),
+			mode,
+			sensitivity,
+		});
+		if (!result) return null;
+		return { bpm: result.bpm ?? null, times: result.times.map((t) => Number(t.toFixed(3))) };
+	},
+
 	/** 復原 / 重做(走和快捷鍵相同的指令歷史) */
 	undo(): void {
 		EditorCore.getInstance().command.undo();

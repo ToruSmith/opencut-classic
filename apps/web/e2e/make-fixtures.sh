@@ -45,4 +45,12 @@ ffmpeg -y -loglevel error \
 	-c:a libopus -b:a 64k -shortest \
 	"$out/av-clip.webm"
 
+# 120 BPM 的節拍素材(每 0.5 秒一下 20 ms 的 1 kHz 短音,12 秒):驗證節拍分析的整條路徑
+ffmpeg -y -loglevel error \
+	-f lavfi -i "color=c=gray:s=320x180:r=30:d=12" \
+	-f lavfi -i "aevalsrc='0.8*sin(2*PI*1000*t)*lt(mod(t,0.5),0.02)':s=48000:d=12" \
+	-c:v libvpx-vp9 -deadline realtime -cpu-used 8 -g 30 -b:v 100k -pix_fmt yuv420p \
+	-c:a libopus -b:a 64k -shortest \
+	"$out/beat-120.webm"
+
 ls "$out" | wc -l | xargs echo "fixtures:"
