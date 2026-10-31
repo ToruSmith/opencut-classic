@@ -392,6 +392,47 @@ const e2eApi = {
 		return { bpm: result.bpm ?? null, times: result.times.map((t) => Number(t.toFixed(3))) };
 	},
 
+	/** 把時間軸上所有有聲音的片段標準化音量,回傳各片段結果與調整後的音量 */
+	async normalizeAll() {
+		const editor = EditorCore.getInstance();
+		const scene = editor.scenes.getActiveScene().tracks;
+		const refs = [...scene.overlay, scene.main, ...scene.audio].flatMap((track) =>
+			track.elements.map((element) => ({ trackId: track.id, elementId: element.id })),
+		);
+		const { normalizeElementsVolume } = await import("@/media/normalize-volume");
+		return normalizeElementsVolume({ editor, refs });
+	},
+
+	/** 依開始時間順序,設定每個有聲片段的音量(dB) */
+	setVolumes({ volumesDb }: { volumesDb: number[] }): number[] {
+		const editor = EditorCore.getInstance();
+		const scene = editor.scenes.getActiveScene().tracks;
+		const sorted = [...scene.overlay, scene.main, ...scene.audio]
+			.flatMap((track) => track.elements.map((element) => ({ track, element })))
+			.filter(({ element }) => element.type === "video" || element.type === "audio")
+			.sort((a, b) => a.element.startTime - b.element.startTime);
+		const updates = sorted.slice(0, volumesDb.length).map(({ track, element }, index) => ({
+			trackId: track.id,
+			elementId: element.id,
+			patch: { params: { ...element.params, volume: volumesDb[index] } },
+		}));
+		editor.timeline.updateElements({ updates: updates as never, pushHistory: false });
+		return volumesDb;
+	},
+
+	/** 依開始時間順序,回傳每個有聲片段目前的音量(dB) */
+	getVolumes(): number[] {
+		const scene = EditorCore.getInstance().scenes.getActiveScene().tracks;
+		return [...scene.overlay, scene.main, ...scene.audio]
+			.flatMap((track) => track.elements)
+			.filter((element) => element.type === "video" || element.type === "audio")
+			.sort((a, b) => a.startTime - b.startTime)
+			.map((element) => {
+				const volume = (element.params as Record<string, unknown>).volume;
+				return typeof volume === "number" ? volume : 0;
+			});
+	},
+
 	/** 復原 / 重做(走和快捷鍵相同的指令歷史) */
 	undo(): void {
 		EditorCore.getInstance().command.undo();

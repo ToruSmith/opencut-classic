@@ -834,6 +834,52 @@ await scenario({
 });
 
 // ---------------------------------------------------------------------------
+// 情境 O:音量標準化。兩段同樣的聲音(440 Hz 正弦波),一段先把音量壓低 20 dB 再標準化,
+// 標準化後兩段在「匯出的聲音」裡的響度應該相同(誤差 1.5 dB 內),且不是原本的差距
+// ---------------------------------------------------------------------------
+await scenario({
+	name: "O-normalize-volume",
+	run: async () => {
+		await openEditor({ name: "e2e-normalize", first: false });
+		const imported = await importFixtures({ names: ["av-clip.webm"] });
+		const id = imported[0].id;
+		// 同一個素材放兩次(兩段各 6 秒),第二段把音量調成 -20 dB
+		await evaluate((assetIds) => window.__opencut.buildSequential({ assetIds }), [id]);
+		await evaluate((assetIds) => window.__opencut.buildSequential({ assetIds }), [id]);
+		const before = await evaluate(() => window.__opencut.setVolumes({ volumesDb: [0, -20] }));
+		const results = await evaluate(() => window.__opencut.normalizeAll());
+		const after = await evaluate(() => window.__opencut.getVolumes());
+		const changed = results.filter((item) => item.status === "changed");
+		record({
+			name: "O1 兩段都被標準化",
+			ok: changed.length === 2,
+			detail: JSON.stringify({ before, results, after }),
+		});
+		const same = after.length === 2 && Math.abs(after[0] - after[1]) < 0.3;
+		record({
+			name: "O2 同樣的聲音、不同起始音量 → 標準化後音量一致",
+			ok: same,
+			detail: `調整後音量(dB)=${JSON.stringify(after)}`,
+		});
+		// 目標 -16 dB 的 RMS:滿幅正弦波約 -3 dB;素材振幅未知,只檢查兩段調整後的音量在合理範圍
+		record({
+			name: "O3 調整後音量在合理範圍(-40~+20 dB)",
+			ok: after.every((v) => v >= -40 && v <= 20),
+			detail: JSON.stringify(after),
+		});
+		// 復原:一步回到標準化前
+		await evaluate(() => window.__opencut.undo());
+		await sleep(500);
+		const undone = await evaluate(() => window.__opencut.getVolumes());
+		record({
+			name: "O4 復原一步回到標準化前的音量",
+			ok: undone.length === 2 && Math.abs(undone[0] - 0) < 0.01 && Math.abs(undone[1] + 20) < 0.01,
+			detail: JSON.stringify(undone),
+		});
+	},
+});
+
+// ---------------------------------------------------------------------------
 // 情境 G:從素材庫刪掉正在用的素材(會連帶移除片段),播放與播放頭同樣必須停 / 縮回
 // ---------------------------------------------------------------------------
 await scenario({

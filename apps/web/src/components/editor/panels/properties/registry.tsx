@@ -28,6 +28,7 @@ import { MasksTab } from "@/masks/components/masks-tab";
 import { SpeedTab } from "@/speed/components/speed-tab";
 import { GraphicTab } from "@/graphics/components/graphic-tab";
 import { OcShapesIcon } from "@/components/icons";
+import { NormalizeVolumeButton } from "./components/normalize-volume-button";
 
 const TRANSFORM_PARAM_KEYS = [
 	"transform.positionX",
@@ -130,12 +131,15 @@ function buildAudioTab({
 		label: "音訊",
 		icon: <HugeiconsIcon icon={MusicNote03Icon} size={16} />,
 		content: ({ trackId }) => (
-			<ElementParamsTab
-				element={element}
-				trackId={trackId}
-				paramKeys={AUDIO_PARAM_KEYS}
-				sectionKey="audio"
-			/>
+			<>
+				<ElementParamsTab
+					element={element}
+					trackId={trackId}
+					paramKeys={AUDIO_PARAM_KEYS}
+					sectionKey="audio"
+				/>
+				<NormalizeVolumeButton trackId={trackId} elementId={element.id} />
+			</>
 		),
 	};
 }
