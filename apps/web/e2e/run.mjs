@@ -475,6 +475,61 @@ await scenario({
 });
 
 // ---------------------------------------------------------------------------
+// 情境 E:編輯延遲。時間軸片段越多,每次小改動(改名)要花多久?
+// 用來判斷「場景索引取代整棵重建」值不值得做;只記錄數字,不判對錯。
+// ---------------------------------------------------------------------------
+await scenario({
+	name: "E-edit-latency",
+	run: async () => {
+		const videoFiles = readdirSync(fixturesDir).filter((file) => file.startsWith("clip-") && file.endsWith(".webm")).sort();
+		for (const clips of [60, 240]) {
+			await openEditor({ name: `e2e-edit-${clips}`, first: false });
+			const imported = await importFixtures({ names: videoFiles });
+			await evaluate(
+				(args) => window.__opencut.buildFastCut(args),
+				{ assetIds: imported.map((asset) => asset.id), count: clips, clipSeconds: 0.5 },
+			);
+			await evaluate(() => window.__opencut.seek({ seconds: 0 }));
+			await sleep(2500);
+			await evaluate(() => {
+				window.__renderPerf = true;
+				window.__renderPerfSink = [];
+			});
+			const result = await evaluate((count) => window.__opencut.measureEdits({ count }), 30);
+			await sleep(1500);
+			const sink = await evaluate(() => window.__renderPerfSink);
+			await evaluate(() => {
+				window.__renderPerf = false;
+			});
+			const stat = (values) => {
+				const sorted = [...values].sort((a, b) => a - b);
+				const mean = values.reduce((sum, v) => sum + v, 0) / Math.max(1, values.length);
+				return { mean: Math.round(mean), p95: sorted[Math.floor(sorted.length * 0.95)] ?? 0, max: sorted[sorted.length - 1] ?? 0 };
+			};
+			const edit = stat(result.editMs);
+			const base = stat(result.baselineMs);
+			let rebuildMean = null;
+			let rebuildMax = null;
+			for (const entry of sink ?? []) {
+				for (const row of entry.spans ?? []) {
+					if (row.span === "sceneRebuild") {
+						rebuildMean = Math.max(rebuildMean ?? 0, row.meanMs);
+						rebuildMax = Math.max(rebuildMax ?? 0, row.p95Ms);
+					}
+				}
+			}
+			const longTotal = result.longTasksMs.reduce((sum, v) => sum + v, 0);
+			record({
+				name: `E 編輯延遲(${result.clipCount} 個片段,僅記錄)`,
+				ok: true,
+				detail: `編輯 平均 ${edit.mean}ms p95 ${edit.p95}ms 最大 ${edit.max}ms;基準(不編輯) 平均 ${base.mean}ms;long task ${result.longTasksMs.length} 次共 ${longTotal}ms;sceneRebuild 平均 ${rebuildMean ?? "n/a"}ms p95 ${rebuildMax ?? "n/a"}ms`,
+				metrics: { clips: result.clipCount, edit, base, longTasks: result.longTasksMs, rebuildMean, rebuildMax },
+			});
+		}
+	},
+});
+
+// ---------------------------------------------------------------------------
 // 總結
 // ---------------------------------------------------------------------------
 record({

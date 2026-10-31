@@ -189,6 +189,59 @@ const e2eApi = {
 		return count * clipSeconds;
 	},
 
+	/**
+	 * 編輯延遲:對第一個片段連續改名 `count` 次(每次都會讓時間軸狀態換新),
+	 * 量「呼叫 → 兩個動畫影格之後」的時間,同時收集 long task。
+	 * `baseline` 是同樣流程但不做編輯的等待時間,拿來扣掉影格本身的間隔。
+	 */
+	async measureEdits({ count }: { count: number }): Promise<{
+		editMs: number[];
+		baselineMs: number[];
+		longTasksMs: number[];
+		clipCount: number;
+	}> {
+		const editor = EditorCore.getInstance();
+		const tracks = editor.scenes.getActiveScene().tracks;
+		const track = tracks.find((candidate) => candidate.elements.length > 0);
+		if (!track) throw new Error("時間軸沒有片段");
+		const target = track.elements[0];
+		const clipCount = tracks.reduce((sum, t) => sum + t.elements.length, 0);
+		const frames = () =>
+			new Promise<void>((done) =>
+				requestAnimationFrame(() => requestAnimationFrame(() => done())),
+			);
+		const longTasksMs: number[] = [];
+		let observer: PerformanceObserver | null = null;
+		try {
+			observer = new PerformanceObserver((list) => {
+				for (const entry of list.getEntries()) longTasksMs.push(Math.round(entry.duration));
+			});
+			observer.observe({ entryTypes: ["longtask"] });
+		} catch {}
+
+		const baselineMs: number[] = [];
+		for (let i = 0; i < 10; i += 1) {
+			const t0 = performance.now();
+			await frames();
+			baselineMs.push(Math.round(performance.now() - t0));
+		}
+		const editMs: number[] = [];
+		for (let i = 0; i < count; i += 1) {
+			const t0 = performance.now();
+			editor.timeline.updateElements({
+				updates: [
+					{ trackId: track.id, elementId: target.id, patch: { name: `edit-${i}` } },
+				],
+				pushHistory: false,
+			});
+			await frames();
+			editMs.push(Math.round(performance.now() - t0));
+			await new Promise((done) => setTimeout(done, 80));
+		}
+		observer?.disconnect();
+		return { editMs, baselineMs, longTasksMs, clipCount };
+	},
+
 	seek({ seconds }: { seconds: number }): void {
 		EditorCore.getInstance().playback.seek({
 			time: mediaTimeFromSeconds({ seconds }),
