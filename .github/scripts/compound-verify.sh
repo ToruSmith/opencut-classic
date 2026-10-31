@@ -31,8 +31,16 @@ run_checks() {
 			echo "no files" > "$OUT/eslint-$label.log"; echo 0 > "$OUT/eslint-$label.code"
 		fi
 
-		timeout 1800 bun run build > "$OUT/build-$label.log" 2>&1
-		echo $? > "$OUT/build-$label.code"
+		# Next refuses symlinked node_modules, so only build the branch.
+		if [ "$label" = "branch" ]; then
+			timeout 1800 bun run build > "$OUT/build-$label.log" 2>&1
+			echo $? > "$OUT/build-$label.code"
+		else
+			echo "skipped" > "$OUT/build-$label.log"; echo skipped > "$OUT/build-$label.code"
+		fi
+		# Full output of the compound tests alone, for diagnosis.
+		[ -f src/timeline/compound/__tests__/compound.test.ts ] && \
+			timeout 300 bun test src/timeline/compound > "$OUT/compound-$label.log" 2>&1
 	)
 }
 

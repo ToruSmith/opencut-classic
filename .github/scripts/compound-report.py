@@ -102,6 +102,22 @@ annotate(
     + ("\n".join(compound_log) or "no compound test lines found\n" + tail(read("test-branch.log"), 40)),
 )
 
+# 3b. Error details from the branch test run (load failures, assertions)
+lines = read("test-branch.log").splitlines()
+details = []
+for i, line in enumerate(lines):
+    if (
+        "compound" in line.lower()
+        or line.strip().startswith(("error:", "TypeError", "SyntaxError", "ReferenceError", "# Unhandled"))
+        or "Expected" in line
+        or "Received" in line
+    ):
+        details.extend(lines[max(0, i - 2) : i + 6])
+        details.append("---")
+annotate("notice", "Test error details (branch)", "\n".join(details[:400]))
+
+annotate("notice", "Compound tests alone (branch)", tail(read("compound-branch.log"), 120))
+
 # 4. Lint (only files this branch touches)
 if code("eslint-branch") != "0":
     annotate(
@@ -115,7 +131,7 @@ else:
 
 # 5. Build
 if code("build-branch") != "0":
-    if code("build-main") == "0":
+    if code("build-main") == "0" and code("build-branch") != "0":
         problems.append("build fails on branch but passes on main")
     annotate("error" if code("build-main") == "0" else "warning",
              "Build output (branch)", tail(read("build-branch.log"), 70))
