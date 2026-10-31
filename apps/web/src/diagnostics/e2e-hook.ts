@@ -294,6 +294,83 @@ const e2eApi = {
 		return doomed.length;
 	},
 
+	/**
+	 * 匯出一段(或整段)並讀回輸出檔做檢查:回傳長度、有沒有影像 / 聲音軌、解析度,
+	 * 以及輸出檔在 `probeSeconds` 各時間點的畫面中心顏色(確認範圍起點與內容對得上)。
+	 * 預設 webm(無頭 Chromium 沒有 H.264 編碼器)、低品質、10 fps,讓軟體繪圖跑得動。
+	 */
+	async exportRange({
+		startSeconds,
+		endSeconds,
+		includeAudio = false,
+		probeSeconds = [],
+	}: {
+		startSeconds?: number;
+		endSeconds?: number;
+		includeAudio?: boolean;
+		probeSeconds?: number[];
+	}) {
+		const editor = EditorCore.getInstance();
+		const started = performance.now();
+		const result = await editor.project.export({
+			options: {
+				format: "webm",
+				quality: "low",
+				fps: { numerator: 10, denominator: 1 },
+				includeAudio,
+				range:
+					startSeconds !== undefined && endSeconds !== undefined
+						? { startSeconds, endSeconds }
+						: undefined,
+			},
+		});
+		const elapsedMs = Math.round(performance.now() - started);
+		if (!result.success || !result.buffer) {
+			return { ok: false as const, error: result.error ?? "no buffer", elapsedMs };
+		}
+		const { Input, BufferSource, ALL_FORMATS, VideoSampleSink } = await import("mediabunny");
+		const input = new Input({ source: new BufferSource(result.buffer), formats: ALL_FORMATS });
+		try {
+			const duration = await input.computeDuration();
+			const video = await input.getPrimaryVideoTrack();
+			const audio = await input.getPrimaryAudioTrack();
+			const colors: Array<{ t: number; rgb: string | null }> = [];
+			if (video) {
+				const sink = new VideoSampleSink(video);
+				for (const t of probeSeconds) {
+					const sample = await sink.getSample(t);
+					if (!sample) {
+						colors.push({ t, rgb: null });
+						continue;
+					}
+					const canvas = new OffscreenCanvas(video.displayWidth, video.displayHeight);
+					const context = canvas.getContext("2d");
+					if (!context) {
+						colors.push({ t, rgb: null });
+						continue;
+					}
+					sample.draw(context, 0, 0, canvas.width, canvas.height);
+					sample.close();
+					const px = context.getImageData(canvas.width >> 1, canvas.height >> 1, 1, 1).data;
+					colors.push({ t, rgb: `rgb(${px[0]},${px[1]},${px[2]})` });
+				}
+			}
+			return {
+				ok: true as const,
+				elapsedMs,
+				bytes: result.buffer.byteLength,
+				duration,
+				hasVideo: Boolean(video),
+				hasAudio: Boolean(audio),
+				width: video?.displayWidth ?? 0,
+				height: video?.displayHeight ?? 0,
+				colors,
+			};
+		} finally {
+			input.dispose?.();
+		}
+	},
+
 	/** 只刪有實際內容的片段(影片、圖片、音訊…),特效片段留著——重現「影片拿掉、特效殘留」 */
 	deleteContentClips(): number {
 		const editor = EditorCore.getInstance();

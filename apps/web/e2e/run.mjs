@@ -210,6 +210,12 @@ async function importFixtures({ names }) {
 	);
 }
 
+function isNear(rgb, target, tolerance = 40) {
+	const m = /rgb\((\d+),(\d+),(\d+)\)/.exec(rgb ?? "");
+	if (!m) return false;
+	return [1, 2, 3].every((i) => Math.abs(Number(m[i]) - target[i - 1]) <= tolerance);
+}
+
 /** 截預覽畫布,回傳中心區塊的平均顏色 */
 async function sampleCenterColor() {
 	const locator = page.locator('[data-e2e-preview="1"]');
@@ -686,6 +692,45 @@ await scenario({
 			name: "K2 播放中拿掉影片、只剩特效:停止播放、總長 0、播放頭回 0",
 			ok: removed > 0 && !after.isPlaying && after.totalSeconds === 0 && after.timeSeconds === 0,
 			detail: `移除=${removed} isPlaying=${after.isPlaying} 總長=${after.totalSeconds}s 播放頭=${after.timeSeconds.toFixed(2)}s;${await uiProbe()}`,
+		});
+	},
+});
+
+// ---------------------------------------------------------------------------
+// 情境 L:匯出(範圍 + 聲音),讀回輸出檔檢查長度、軌道、起點畫面
+// 4 支 6 秒純色(紅綠藍黃)首尾相接 = 24 秒。範圍 3–9 秒 → 約 6 秒,0–3 秒應是紅(原片 3–6 秒),3–6 秒應是綠
+// ---------------------------------------------------------------------------
+await scenario({
+	name: "L-export",
+	run: async () => {
+		const videoFiles = readdirSync(fixturesDir).filter((file) => file.startsWith("clip-") && file.endsWith(".webm")).sort();
+		await openEditor({ name: "e2e-export", first: false });
+		const imported = await importFixtures({ names: videoFiles });
+		const ids = imported.map((asset) => asset.id);
+		await evaluate((assetIds) => window.__opencut.buildSequential({ assetIds }), ids);
+		const r = await evaluate(() =>
+			window.__opencut.exportRange({ startSeconds: 3, endSeconds: 9, probeSeconds: [1, 4] }),
+		);
+		record({
+			name: "L1 範圍匯出 3–9 秒:長度約 6 秒、有影像軌",
+			ok: r.ok && Math.abs(r.duration - 6) < 0.3 && r.hasVideo,
+			detail: JSON.stringify(r),
+		});
+		record({
+			name: "L2 輸出檔畫面:1 秒是紅(原片 3–6 秒)、4 秒是綠",
+			ok: r.ok && r.colors?.length === 2 && isNear(r.colors[0].rgb, [255, 0, 0]) && isNear(r.colors[1].rgb, [0, 128, 0]),
+			detail: JSON.stringify(r.colors),
+		});
+
+		// 有聲音的素材,含聲音匯出 → 輸出要有音訊軌
+		await evaluate(() => window.__opencut.deleteClips({ keep: 0 }));
+		const av = await importFixtures({ names: ["av-clip.webm"] });
+		await evaluate((assetIds) => window.__opencut.buildSequential({ assetIds }), av.map((asset) => asset.id));
+		const withAudio = await evaluate(() => window.__opencut.exportRange({ includeAudio: true }));
+		record({
+			name: "L3 含聲音匯出:有影像軌與音訊軌",
+			ok: withAudio.ok && withAudio.hasVideo && withAudio.hasAudio && withAudio.duration > 1,
+			detail: JSON.stringify(withAudio),
 		});
 	},
 });
