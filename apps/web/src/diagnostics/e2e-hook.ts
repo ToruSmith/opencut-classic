@@ -194,7 +194,7 @@ const e2eApi = {
 	 * 量「呼叫 → 兩個動畫影格之後」的時間,同時收集 long task。
 	 * `baseline` 是同樣流程但不做編輯的等待時間,拿來扣掉影格本身的間隔。
 	 */
-	async measureEdits({ count }: { count: number }): Promise<{
+	async measureEdits({ count, kind = "rename" }: { count: number; kind?: "rename" | "opacity" }): Promise<{
 		editMs: number[];
 		baselineMs: number[];
 		longTasksMs: number[];
@@ -231,7 +231,16 @@ const e2eApi = {
 			const t0 = performance.now();
 			editor.timeline.updateElements({
 				updates: [
-					{ trackId: track.id, elementId: target.id, patch: { name: `edit-${i}` } },
+					{
+						trackId: track.id,
+						elementId: target.id,
+						patch:
+							kind === "opacity"
+								? ({
+										params: { ...(target as { params?: Record<string, unknown> }).params, opacity: i % 2 === 0 ? 0.9 : 1 },
+									} as Partial<typeof target>)
+								: { name: `edit-${i}` },
+					},
 				],
 				pushHistory: false,
 			});

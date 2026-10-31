@@ -519,8 +519,8 @@ await scenario({
 	name: "E-edit-latency",
 	run: async () => {
 		const videoFiles = readdirSync(fixturesDir).filter((file) => file.startsWith("clip-") && file.endsWith(".webm")).sort();
-		for (const clips of [60, 240]) {
-			await openEditor({ name: `e2e-edit-${clips}`, first: false });
+		for (const [clips, kind] of [[60, "rename"], [240, "rename"], [60, "opacity"], [240, "opacity"]]) {
+			await openEditor({ name: `e2e-edit-${clips}-${kind}`, first: false });
 			const imported = await importFixtures({ names: videoFiles });
 			await evaluate(
 				(args) => window.__opencut.buildFastCut(args),
@@ -532,7 +532,7 @@ await scenario({
 				window.__renderPerf = true;
 				window.__renderPerfSink = [];
 			});
-			const result = await evaluate((count) => window.__opencut.measureEdits({ count }), 30);
+			const result = await evaluate((args) => window.__opencut.measureEdits(args), { count: 30, kind });
 			await sleep(1500);
 			const sink = await evaluate(() => window.__renderPerfSink);
 			await evaluate(() => {
@@ -557,7 +557,7 @@ await scenario({
 			}
 			const longTotal = result.longTasksMs.reduce((sum, v) => sum + v, 0);
 			record({
-				name: `E 編輯延遲(${result.clipCount} 個片段,僅記錄)`,
+				name: `E 編輯延遲(${result.clipCount} 個片段,${kind === "opacity" ? "改不透明度" : "改名"},僅記錄)`,
 				ok: true,
 				detail: `編輯 平均 ${edit.mean}ms p95 ${edit.p95}ms 最大 ${edit.max}ms;基準(不編輯) 平均 ${base.mean}ms;long task ${result.longTasksMs.length} 次共 ${longTotal}ms;sceneRebuild 平均 ${rebuildMean ?? "n/a"}ms p95 ${rebuildMax ?? "n/a"}ms`,
 				metrics: { clips: result.clipCount, edit, base, longTasks: result.longTasksMs, rebuildMean, rebuildMax },
