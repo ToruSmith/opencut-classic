@@ -3,6 +3,8 @@
 個人用的瀏覽器剪輯器,由 OpenCut classic 精簡而來:沒有網站與後端,Vite 靜態 SPA,部署在 GitHub Pages。
 渲染引擎是 Rust(wgpu)編譯成 WASM。檔案與專案都留在使用者的瀏覽器(IndexedDB / OPFS)。
 
+使用者說明書:`docs/manual.md`(新增或移除功能時一併更新)。
+
 ## 工作規則
 
 - **只在 `slim` 分支工作,不要動 `main`。**
