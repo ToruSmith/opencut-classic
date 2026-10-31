@@ -1,4 +1,5 @@
-import { addMediaTime, type MediaTime, ZERO_MEDIA_TIME } from "@/wasm";
+import { type MediaTime, ZERO_MEDIA_TIME } from "@/wasm";
+import { computeContentEnd } from "./content-end";
 import type { SceneTracks } from "./types";
 
 export * from "./types";
@@ -16,18 +17,7 @@ export function calculateTotalDuration({
 }: {
 	tracks: SceneTracks;
 }): MediaTime {
-	const orderedTracks = [...tracks.overlay, tracks.main, ...tracks.audio];
-	if (orderedTracks.length === 0) return ZERO_MEDIA_TIME;
-
-	let maxEnd: MediaTime = ZERO_MEDIA_TIME;
-	for (const track of orderedTracks) {
-		for (const element of track.elements) {
-			const elementEnd = addMediaTime({
-				a: element.startTime,
-				b: element.duration,
-			});
-			if (elementEnd > maxEnd) maxEnd = elementEnd;
-		}
-	}
-	return maxEnd;
+	// 特效片段不撐長時間軸(見 content-end.ts)
+	const end = computeContentEnd({ tracks });
+	return end > 0 ? (end as MediaTime) : ZERO_MEDIA_TIME;
 }
