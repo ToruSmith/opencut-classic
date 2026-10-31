@@ -48,6 +48,8 @@ export class AudioManager {
 	private lastIsPlaying = false;
 	private lastVolume = 1;
 	private playbackLatencyCompensationSeconds = 0;
+	/** 這一輪播放的時間基準(playbackStartTime / playbackStartContextTime)是否已建立;沒建立前不當時鐘用 */
+	private clockReady = false;
 	private unsubscribers: Array<() => void> = [];
 
 	constructor(private editor: EditorCore) {
@@ -59,7 +61,27 @@ export class AudioManager {
 			this.editor.media.subscribe(this.handleTimelineChange),
 			this.editor.playback.onSeek(this.handleSeek),
 		);
+		// 音訊時鐘為主:播放中畫面時間跟著 AudioContext 走,影像與聲音才不會越差越多
+		this.editor.playback.setClockSource({ source: this.getMasterClockSeconds });
 	}
+
+	/**
+	 * 目前「聽到的」時間軸位置(秒)。沒有可靠的音訊時鐘時回傳 null,播放管理器會退回牆上時鐘。
+	 * 扣掉輸出延遲(聲音從排程到喇叭的時間)與解碼太晚時的排程位移。
+	 */
+	private getMasterClockSeconds = (): number | null => {
+		const audioContext = this.audioContext;
+		if (!audioContext || !this.clockReady) return null;
+		if (audioContext.state !== "running") return null;
+		if (!this.editor.playback.getIsPlaying()) return null;
+		const outputLatency = Math.min(
+			0.25,
+			Math.max(0, audioContext.outputLatency || audioContext.baseLatency || 0),
+		);
+		return (
+			this.getPlaybackTime() - this.playbackLatencyCompensationSeconds - outputLatency
+		);
+	};
 
 	dispose(): void {
 		this.stopPlayback();
@@ -157,6 +179,7 @@ export class AudioManager {
 		this.stopPlayback();
 		this.playbackSessionId++;
 		this.playbackLatencyCompensationSeconds = 0;
+		this.clockReady = false;
 
 		const tracks = this.editor.scenes.getActiveScene().tracks;
 		const mediaAssets = this.editor.media.getAssets();
@@ -171,8 +194,12 @@ export class AudioManager {
 		this.clips = await collectAudioClips({ tracks, mediaAssets });
 		if (!this.editor.playback.getIsPlaying()) return;
 
-		this.playbackStartTime = time;
+		// resume / 解碼要時間,這段時間畫面已經往前走了:聲音從「現在」的位置開始,而不是請求播放時的位置
+		this.playbackStartTime = this.editor.playback.getIsScrubbing()
+			? time
+			: this.editor.playback.getCurrentTime() / TICKS_PER_SECOND;
 		this.playbackStartContextTime = audioContext.currentTime;
+		this.clockReady = true;
 
 		this.scheduleUpcomingClips();
 
@@ -215,6 +242,7 @@ export class AudioManager {
 	}
 
 	private stopPlayback(): void {
+		this.clockReady = false;
 		if (this.scheduleTimer && typeof window !== "undefined") {
 			window.clearInterval(this.scheduleTimer);
 		}

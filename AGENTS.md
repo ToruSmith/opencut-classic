@@ -119,7 +119,11 @@
   暫停、拖曳、匯出一律不給 `maxWaitMs`(要精確的那一格)。`CanvasRenderer.usedStaleFrame` 記錄上一次 render 有沒有用到舊的一格,
   預覽迴圈在**暫停後**會補渲染一次(`needsExactRenderRef`)。解碼器還沒有任何畫面時不走這條,照常等。
 - **復原 / 重做素材**:`AddMediaAssetCommand.undo` 與 `swapRestoredAsset` 會 `videoCache.clearVideo`,避免解碼器還綁著失效的舊 `File`。
-- **還沒做**(路線圖第 2 階段以後):音訊時鐘為主、場景索引取代整棵重建與深度比對、合成器每圖層 2 次全畫面 pass 的快速路徑、解碼搬進 Worker。
+- **音訊時鐘為主(Phase 2 第一項,2026-10-31,未實測)**:播放中 `PlaybackManager.updateTime` 優先用 `AudioManager.getMasterClockSeconds`
+  (`AudioContext` 時間 − 輸出延遲 − 解碼太晚的排程位移),沒有可用時鐘(沒有音訊 context、`suspended`、基準未建立)就退回 `performance.now`;兩者來回切換時牆上時鐘會對齊,不會跳。
+  時間不倒退(只往前取較大者)。**同時修了一個起點誤差**:`startPlayback` 要等 `resume` 與解碼,以前聲音從「請求播放時」的位置開始、畫面卻已往前走,
+  現在聲音從「完成準備那一刻的播放頭」開始。沒有音訊素材的專案行為不變。自動驗收的素材沒有聲音,**這條路徑 CI 看不到**,要實機看口型 / 踩點是否對齊(`docs/qa-checklist.md` 3.28)。
+- **還沒做**(路線圖第 2 階段其餘項目):場景索引取代整棵重建與深度比對、合成器每圖層 2 次全畫面 pass 的快速路徑、解碼搬進 Worker。
 
 ## 自動驗收(無 GPU、給 AI 剪輯師與接手者用,2026-10-31)
 

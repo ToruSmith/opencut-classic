@@ -22,6 +22,8 @@ export class PlaybackManager {
 	private playbackStartWallTime = 0;
 	private playbackStartTime: MediaTime = ZERO_MEDIA_TIME;
 	private timelineScopeBound = false;
+	/** 音訊時鐘(秒);回傳 null 代表目前沒有可用的音訊時鐘,改用牆上時鐘 */
+	private clockSource: (() => number | null) | null = null;
 
 	constructor(private editor: EditorCore) {}
 
@@ -37,6 +39,10 @@ export class PlaybackManager {
 		this.editor.scenes.subscribe(reconcile);
 		this.timelineScopeBound = true;
 		this.reconcileTimelineScope();
+	}
+
+	setClockSource({ source }: { source: (() => number | null) | null }): void {
+		this.clockSource = source;
 	}
 
 	play(): void {
@@ -216,10 +222,20 @@ export class PlaybackManager {
 		const fps = this.editor.project.getActive()?.settings.fps;
 		const elapsedSeconds =
 			(performance.now() - this.playbackStartWallTime) / 1000;
-		const rawTime = addMediaTime({
+		const wallTime = addMediaTime({
 			a: this.playbackStartTime,
 			b: mediaTimeFromSeconds({ seconds: elapsedSeconds }),
 		});
+		const audioSeconds = this.clockSource?.() ?? null;
+		let rawTime = wallTime;
+		if (audioSeconds !== null && Number.isFinite(audioSeconds)) {
+			const audioTime = mediaTimeFromSeconds({ seconds: Math.max(0, audioSeconds) });
+			// 時間不倒退(輸出延遲估計的小抖動不該讓播放頭往回跳)
+			rawTime = audioTime > this.currentTime ? audioTime : this.currentTime;
+			// 把牆上時鐘對齊到目前時間,音訊時鐘中斷時退回去不會跳
+			this.playbackStartWallTime = performance.now();
+			this.playbackStartTime = rawTime;
+		}
 		const newTime = fps ? roundFrameTime({ time: rawTime, fps }) : rawTime;
 		const maxTime = this.editor.timeline.getTotalDuration();
 
