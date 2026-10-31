@@ -12,6 +12,7 @@ import { processMediaAssets } from "@/media/processing";
 import { buildEffectElement, buildElementFromMedia } from "@/timeline/element-utils";
 import type { MediaAsset } from "@/media/types";
 import type { TimelineElement } from "@/timeline";
+import { isCompoundElement } from "@/timeline/compound";
 import { getImageCacheSize } from "@/services/renderer/nodes/image-node";
 import { wasmCompositor } from "@/services/renderer/compositor/wasm-compositor";
 import { MAX_ACTIVE_SINKS, videoCache } from "@/services/video-cache/service";
@@ -432,6 +433,63 @@ const e2eApi = {
 				const volume = (element.params as Record<string, unknown>).volume;
 				return typeof volume === "number" ? volume : 0;
 			});
+	},
+
+	// ── 組合片段 ──────────────────────────────────────────────
+
+	/** 把主軌第 `from` ~ `to` 個片段(0 起算、依開始時間)包成組合片段,走和介面相同的路徑 */
+	compoundCreate({ from, to }: { from: number; to: number }) {
+		const editor = EditorCore.getInstance();
+		const main = editor.scenes.getActiveScene().tracks.main;
+		const sorted = [...main.elements].sort((a, b) => a.startTime - b.startTime);
+		const elementRefs = sorted
+			.slice(from, to + 1)
+			.map((element) => ({ trackId: main.id, elementId: element.id }));
+		return editor.scenes.createCompoundFromSelection({ elementRefs });
+	},
+
+	/** 組合片段相關狀態:場景數、目前場景種類、主軌片段種類(依開始時間)、總長 */
+	compoundInfo() {
+		const editor = EditorCore.getInstance();
+		const scene = editor.scenes.getActiveScene();
+		return {
+			sceneCount: editor.scenes.getScenes().length,
+			activeKind: scene.kind ?? "normal",
+			activeSceneName: scene.name,
+			mainTypes: [...scene.tracks.main.elements]
+				.sort((a, b) => a.startTime - b.startTime)
+				.map((element) => element.type),
+			breadcrumb: editor.scenes.getCompoundBreadcrumb().map((crumb) => crumb.name),
+			totalSeconds: mediaTimeToSeconds({
+				time: editor.timeline.getTotalDuration(),
+			}),
+		};
+	},
+
+	/** 打開主軌上第一個組合片段(等同雙擊) */
+	async compoundEnter() {
+		const editor = EditorCore.getInstance();
+		const main = editor.scenes.getActiveScene().tracks.main;
+		const compound = main.elements.find(isCompoundElement);
+		if (!compound) return { ok: false as const, reason: "no-compound" };
+		return editor.scenes.enterCompound({
+			ref: { trackId: main.id, elementId: compound.id },
+		});
+	},
+
+	async compoundExit(): Promise<void> {
+		await EditorCore.getInstance().scenes.exitCompound();
+	},
+
+	/** 解除主軌上第一個組合片段 */
+	compoundUngroup() {
+		const editor = EditorCore.getInstance();
+		const main = editor.scenes.getActiveScene().tracks.main;
+		const compound = main.elements.find(isCompoundElement);
+		if (!compound) return { ok: false as const, reason: "no-compound" };
+		return editor.scenes.ungroupCompound({
+			ref: { trackId: main.id, elementId: compound.id },
+		});
 	},
 
 	/** 復原 / 重做(走和快捷鍵相同的指令歷史) */

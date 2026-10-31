@@ -30,6 +30,11 @@ import {
 	type ScopeEntry,
 } from "@/selection/scope";
 import { useCommittedRef } from "@/hooks/use-committed-ref";
+import { toast } from "sonner";
+import {
+	COMPOUND_FAILURE_MESSAGES,
+	isCompoundElement,
+} from "@/timeline/compound";
 
 export function useEditorActions() {
 	const editor = useEditor();
@@ -506,6 +511,61 @@ export function useEditorActions() {
 			editor.timeline.duplicateElements({
 				elements: selectedElements,
 			});
+		},
+		undefined,
+	);
+
+	useActionHandler(
+		"create-compound",
+		() => {
+			const result = editor.scenes.createCompoundFromSelection({
+				elementRefs: selectedElements,
+			});
+			if (!result.ok) toast.error(COMPOUND_FAILURE_MESSAGES[result.reason]);
+		},
+		undefined,
+	);
+
+	useActionHandler(
+		"ungroup-compound",
+		() => {
+			const compounds = editor.timeline
+				.getElementsWithTracks({ elements: selectedElements })
+				.filter(({ element }) => isCompoundElement(element));
+			if (compounds.length !== 1) {
+				toast.error("請選取一個組合片段再解除。");
+				return;
+			}
+			const { track, element } = compounds[0];
+			const result = editor.scenes.ungroupCompound({
+				ref: { trackId: track.id, elementId: element.id },
+			});
+			if (!result.ok) toast.error(COMPOUND_FAILURE_MESSAGES[result.reason]);
+		},
+		undefined,
+	);
+
+	useActionHandler(
+		"enter-compound",
+		(ref) => {
+			const compounds = editor.timeline
+				.getElementsWithTracks({ elements: ref ? [ref] : selectedElements })
+				.filter(({ element }) => isCompoundElement(element));
+			if (compounds.length !== 1) return;
+			const { track, element } = compounds[0];
+			void editor.scenes
+				.enterCompound({ ref: { trackId: track.id, elementId: element.id } })
+				.then((result) => {
+					if (!result.ok) toast.error(COMPOUND_FAILURE_MESSAGES[result.reason]);
+				});
+		},
+		undefined,
+	);
+
+	useActionHandler(
+		"exit-compound",
+		() => {
+			void editor.scenes.exitCompound();
 		},
 		undefined,
 	);

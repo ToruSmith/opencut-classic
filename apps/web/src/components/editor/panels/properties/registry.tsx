@@ -359,5 +359,9 @@ export function getPropertiesConfig({
 			return getAudioConfig({ element });
 		case "effect":
 			return getEffectConfig({ element });
+		case "compound":
+			// Compound clips have no editable properties of their own yet; their
+			// contents are edited by opening the clip.
+			return { defaultTab: "", tabs: [] };
 	}
 }

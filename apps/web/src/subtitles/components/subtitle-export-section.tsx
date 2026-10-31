@@ -23,7 +23,7 @@ export function SubtitleExportSection() {
 		const source =
 			selected.length > 0
 				? selected
-				: [editor.scenes.getActiveScene().tracks.main, ...editor.scenes.getActiveScene().tracks.overlay]
+				: [editor.scenes.getPlaybackTracks().main, ...editor.scenes.getPlaybackTracks().overlay]
 						.flatMap((track): TimelineElement[] => [...track.elements])
 						.filter((element) => element.type === "text");
 		return source.map((element) => ({

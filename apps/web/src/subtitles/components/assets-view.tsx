@@ -137,7 +137,7 @@ export function Captions() {
 		dispatch({ type: "start", step: "擷取音訊…" });
 		try {
 			const audioBlob = await extractTimelineAudio({
-				tracks: editor.scenes.getActiveScene().tracks,
+				tracks: editor.scenes.getPlaybackTracks(),
 				mediaAssets: editor.media.getAssets(),
 				totalDuration: editor.timeline.getTotalDuration(),
 			});
