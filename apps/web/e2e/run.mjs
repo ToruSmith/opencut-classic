@@ -100,7 +100,7 @@ const context = await browser.newContext({ viewport: { width: 1600, height: 900 
 const page = await context.newPage();
 
 page.on("pageerror", (error) => {
-	fatalConsole.push(`pageerror: ${error.message}`);
+	fatalConsole.push(`pageerror: ${error.message} @ ${String(error.stack ?? '').split('\n').slice(1, 4).map((l) => l.trim().replace(/https?:\/\/[^/]+\//, '')).join(' < ')}`);
 });
 page.on("console", (message) => {
 	const text = message.text();
@@ -269,26 +269,31 @@ function summarizePerf({ sink }) {
 	};
 }
 
-/** 讀介面上實際顯示的東西:時間文字、播放 / 暫停按鈕、預覽中心顏色 */
+/** 讀介面上實際顯示的東西:含時間格式的文字(連同所在元素)、播放 / 暫停圖示、預覽中心顏色 */
 async function uiProbe() {
 	const dom = await evaluate(() => {
-		const timeLike = /^\s*\d{1,2}:\d{2}([.:]\d{1,3})?(\s*\/\s*\d{1,2}:\d{2}([.:]\d{1,3})?)?\s*$/;
-		const texts = [];
+		const timeLike = /\d{1,2}:\d{2}/;
+		const rows = [];
 		const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
 		while (walker.nextNode()) {
-			const value = walker.currentNode.textContent ?? "";
-			if (timeLike.test(value)) texts.push(value.trim());
+			const value = (walker.currentNode.textContent ?? "").trim();
+			if (value.length > 0 && value.length < 24 && timeLike.test(value)) {
+				const parent = walker.currentNode.parentElement;
+				const where = (parent?.className?.toString() ?? "").split(" ").slice(0, 3).join(".").slice(0, 40);
+				rows.push(`${value}@${where}`);
+			}
 		}
-		const buttons = [...document.querySelectorAll("button")]
-			.map((button) => (button.getAttribute("aria-label") || button.getAttribute("title") || "").trim())
-			.filter((label) => /播放|暫停|play|pause/i.test(label));
-		return { texts: [...new Set(texts)].slice(0, 8), buttons: [...new Set(buttons)].slice(0, 4) };
+		const icons = {
+			play: document.querySelectorAll("svg.lucide-play, svg[class*='play']").length,
+			pause: document.querySelectorAll("svg.lucide-pause, svg[class*='pause']").length,
+		};
+		return { rows: [...new Set(rows)].slice(0, 14), icons };
 	});
 	let color = null;
 	try {
 		color = await sampleCenterColor();
 	} catch {}
-	return `介面時間=${JSON.stringify(dom.texts)} 按鈕=${JSON.stringify(dom.buttons)} 預覽中心=rgb(${color ? color.join(",") : "?"})`;
+	return `介面時間=${JSON.stringify(dom.rows)} 圖示=${JSON.stringify(dom.icons)} 預覽中心=rgb(${color ? color.join(",") : "?"})`;
 }
 
 async function scenario({ name, run }) {

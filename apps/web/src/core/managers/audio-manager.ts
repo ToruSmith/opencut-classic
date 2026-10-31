@@ -263,7 +263,26 @@ export class AudioManager {
 		this.queuedSources.clear();
 	}
 
-	private async runClipIterator({
+	/**
+	 * 解碼途中素材被刪掉 / 時間軸被改掉時,輸入會被釋放(`Input has been disposed`),
+	 * 這種中斷是預期的:該輪播放已經換掉了就安靜結束,不要變成未捕捉的 Promise 錯誤。
+	 */
+	private async runClipIterator(params: {
+		clip: AudioClipSource;
+		startTime: number;
+		sessionId: number;
+	}): Promise<void> {
+		try {
+			await this.runClipIteratorUnsafe(params);
+		} catch (error) {
+			if (params.sessionId !== this.playbackSessionId || !this.editor.playback.getIsPlaying()) {
+				return;
+			}
+			console.error("音訊解碼中斷:", error);
+		}
+	}
+
+	private async runClipIteratorUnsafe({
 		clip,
 		startTime,
 		sessionId,
@@ -397,7 +416,22 @@ export class AudioManager {
 		// the set is cleared on stopPlayback anyway
 	}
 
-	private async schedulePreparedClip({
+	private async schedulePreparedClip(params: {
+		clip: AudioClipSource;
+		startTime: number;
+		sessionId: number;
+	}): Promise<void> {
+		try {
+			await this.schedulePreparedClipUnsafe(params);
+		} catch (error) {
+			if (params.sessionId !== this.playbackSessionId || !this.editor.playback.getIsPlaying()) {
+				return;
+			}
+			console.error("音訊預備緩衝中斷:", error);
+		}
+	}
+
+	private async schedulePreparedClipUnsafe({
 		clip,
 		startTime,
 		sessionId,
